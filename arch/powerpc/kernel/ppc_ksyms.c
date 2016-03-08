@@ -6,9 +6,15 @@
 #include <asm/cacheflush.h>
 #include <asm/epapr_hcalls.h>
 
+/* XXX: This should be in the block below. it's seperate to make backporting easier*/
+#ifdef CONFIG_PPC64
+EXPORT_SYMBOL(flush_dcache_range_nosync);
+#endif
+
 #ifdef CONFIG_PPC64
 EXPORT_SYMBOL(flush_dcache_range);
 #endif
+
 EXPORT_SYMBOL(flush_icache_range);
 
 EXPORT_SYMBOL(empty_zero_page);
