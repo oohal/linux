@@ -137,7 +137,12 @@ _GLOBAL(flush_dcache_range)
 	srw.	r8,r8,r9		/* compute line count */
 	beqlr				/* nothing to do? */
 	mtctr	r8
+	/* dcbst doesn't do anything useful on recent POWER chips */
+#ifdef CONFIG_PPC_BOOK3S_64
+0:	dcbf	0,r6
+#else
 0:	dcbst	0,r6
+#endif
 	add	r6,r6,r7
 	bdnz	0b
 	sync
