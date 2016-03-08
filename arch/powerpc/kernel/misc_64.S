@@ -182,7 +182,7 @@ _GLOBAL(flush_dcache_phys_range)
 	isync
 	blr
 
-_GLOBAL(flush_inval_dcache_range)
+_GLOBAL_TOC(flush_inval_dcache_range)
  	ld	r10,PPC64_CACHES@toc(r2)
 	lwz	r7,DCACHEL1BLOCKSIZE(r10)	/* Get dcache block size */
 	addi	r5,r7,-1
