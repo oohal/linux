@@ -137,12 +137,52 @@ _GLOBAL(flush_dcache_range)
 	srw.	r8,r8,r9		/* compute line count */
 	beqlr				/* nothing to do? */
 	mtctr	r8
+	/* dcbst doesn't do anything useful on recent POWER chips */
+#ifdef CONFIG_PPC64
+0:	dcbf	0,r6
+#else
 0:	dcbst	0,r6
+#endif
 	add	r6,r6,r7
 	bdnz	0b
 	sync
 	blr
 EXPORT_SYMBOL(flush_dcache_range)
+
+/*
+ * Like above, but without a sync
+ *
+ * flush_dcache_range_nosync(unsigned long start, unsigned long stop)
+ *
+ *    flush all bytes from start to stop-1 inclusive
+ */
+_GLOBAL(flush_dcache_range_nosync)
+
+/*
+ * Flush the data cache to memory
+ *
+ * Different systems have different cache line sizes
+ */
+	ld	r10,PPC64_CACHES@toc(r2)
+	lwz	r7,DCACHEL1LINESIZE(r10)	/* Get dcache line size */
+	addi	r5,r7,-1
+	andc	r6,r3,r5		/* round low to line bdy */
+	subf	r8,r6,r4		/* compute length */
+	add	r8,r8,r5		/* ensure we get enough */
+	lwz	r9,DCACHEL1LOGLINESIZE(r10)	/* Get log-2 of dcache line size */
+	srw.	r8,r8,r9		/* compute line count */
+	beqlr				/* nothing to do? */
+	mtctr	r8
+	/* dcbst doesn't do anything useful on recent POWER chips */
+#ifdef CONFIG_PPC64
+0:	dcbf	0,r6
+#else
+0:	dcbst	0,r6
+#endif
+	add	r6,r6,r7
+	bdnz	0b
+	blr
+EXPORT_SYMBOL(flush_dcache_range_nosync)
 
 /*
  * Like above, but works on non-mapped physical addresses.
