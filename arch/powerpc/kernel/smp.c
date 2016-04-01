@@ -378,6 +378,25 @@ static void smp_store_cpu_info(int id)
 #endif
 }
 
+/*
+ * Relationships between CPUs are maintained in a set of per-cpu cpumasks. We
+ * need to ensure that they are kept consistant between CPUs when they are
+ * changed.
+ *
+ * This is slightly tricky since the core mask must be a strict superset of
+ * the sibling mask.
+ */
+static void set_cpus_related(int i, int j, bool related, struct cpumask *(*relation_fn)(int))
+{
+	if (related) {
+		cpumask_set_cpu(i, relation_fn(j));
+		cpumask_set_cpu(j, relation_fn(i));
+	} else {
+		cpumask_clear_cpu(i, relation_fn(j));
+		cpumask_clear_cpu(j, relation_fn(i));
+	}
+}
+
 void __init smp_prepare_cpus(unsigned int max_cpus)
 {
 	unsigned int cpu;
@@ -617,17 +636,9 @@ static void traverse_siblings_chip_id(int cpu, bool add, int chipid)
 	const struct cpumask *mask = add ? cpu_online_mask : cpu_present_mask;
 	int i;
 
-	for_each_cpu(i, mask) {
-		if (cpu_to_chip_id(i) == chipid) {
-			if (add) {
-				cpumask_set_cpu(cpu, cpu_core_mask(i));
-				cpumask_set_cpu(i, cpu_core_mask(cpu));
-			} else {
-				cpumask_clear_cpu(cpu, cpu_core_mask(i));
-				cpumask_clear_cpu(i, cpu_core_mask(cpu));
-			}
-		}
-	}
+	for_each_cpu(i, mask)
+		if (cpu_to_chip_id(i) == chipid)
+			set_cpus_related(cpu, i, add, cpu_core_mask);
 }
 
 /* Must be called when no change can occur to cpu_present_mask,
@@ -667,23 +678,17 @@ static void traverse_core_siblings(int cpu, bool add)
 		return;
 	}
 
-	/* if the chip-id fails then threads which share L2 cache are */
-
+	/* if the chip-id fails then group siblings by the L2 cache */
 	l2_cache = cpu_to_l2cache(cpu);
 	mask = add ? cpu_online_mask : cpu_present_mask;
 	for_each_cpu(i, mask) {
 		np = cpu_to_l2cache(i);
 		if (!np)
 			continue;
-		if (np == l2_cache) {
-			if (add) {
-				cpumask_set_cpu(cpu, cpu_core_mask(i));
-				cpumask_set_cpu(i, cpu_core_mask(cpu));
-			} else {
-				cpumask_clear_cpu(cpu, cpu_core_mask(i));
-				cpumask_clear_cpu(i, cpu_core_mask(cpu));
-			}
-		}
+
+		if (np == l2_cache)
+			set_cpus_related(cpu, i, add, cpu_core_mask);
+
 		of_node_put(np);
 	}
 	of_node_put(l2_cache);
@@ -721,15 +726,13 @@ void start_secondary(void *unused)
 	for (i = 0; i < threads_per_core; i++) {
 		if (cpu_is_offline(base + i) && (cpu != base + i))
 			continue;
-		cpumask_set_cpu(cpu, cpu_sibling_mask(base + i));
-		cpumask_set_cpu(base + i, cpu_sibling_mask(cpu));
+		set_cpus_related(cpu, base + i, true, cpu_sibling_mask);
 
 		/* cpu_core_map should be a superset of
 		 * cpu_sibling_map even if we don't have cache
 		 * information, so update the former here, too.
 		 */
-		cpumask_set_cpu(cpu, cpu_core_mask(base + i));
-		cpumask_set_cpu(base + i, cpu_core_mask(cpu));
+		set_cpus_related(cpu, base + i, true, cpu_core_mask);
 	}
 	traverse_core_siblings(cpu, true);
 
@@ -815,10 +818,8 @@ int __cpu_disable(void)
 	/* Update sibling maps */
 	base = cpu_first_thread_sibling(cpu);
 	for (i = 0; i < threads_per_core && base + i < nr_cpu_ids; i++) {
-		cpumask_clear_cpu(cpu, cpu_sibling_mask(base + i));
-		cpumask_clear_cpu(base + i, cpu_sibling_mask(cpu));
-		cpumask_clear_cpu(cpu, cpu_core_mask(base + i));
-		cpumask_clear_cpu(base + i, cpu_core_mask(cpu));
+		set_cpus_related(cpu, base + i, false, cpu_sibling_mask);
+		set_cpus_related(cpu, base + i, false, cpu_core_mask);
 	}
 	traverse_core_siblings(cpu, false);
 
