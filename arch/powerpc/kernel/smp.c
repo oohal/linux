@@ -631,14 +631,21 @@ int cpu_first_thread_of_core(int core)
 }
 EXPORT_SYMBOL_GPL(cpu_first_thread_of_core);
 
-static void traverse_siblings_chip_id(int cpu, bool add, int chipid)
+static bool update_core_mask_by_chip_id(int cpu, bool add)
 {
-	const struct cpumask *mask = add ? cpu_online_mask : cpu_present_mask;
+	int chipid = cpu_to_chip_id(cpu);
 	int i;
 
-	for_each_cpu(i, mask)
+	if (chipid == -1)
+		return false;
+
+	set_cpus_related(cpu, cpu, add, cpu_core_mask);
+
+	for_each_cpu(i, cpu_online_mask)
 		if (cpu_to_chip_id(i) == chipid)
 			set_cpus_related(cpu, i, add, cpu_core_mask);
+
+	return true;
 }
 
 /* Must be called when no change can occur to cpu_present_mask,
@@ -648,9 +655,6 @@ static struct device_node *cpu_to_l2cache(int cpu)
 {
 	struct device_node *np;
 	struct device_node *cache;
-
-	if (!cpu_present(cpu))
-		return NULL;
 
 	np = of_get_cpu_node(cpu, NULL);
 	if (np == NULL)
@@ -663,42 +667,79 @@ static struct device_node *cpu_to_l2cache(int cpu)
 	return cache;
 }
 
-static void traverse_core_siblings(int cpu, bool add)
+static bool update_core_mask_by_l2(int cpu, bool onlining)
 {
 	struct device_node *l2_cache, *np;
-	const struct cpumask *mask;
-	int chip_id;
 	int i;
 
-	/* threads that share a chip-id are considered siblings (same die) */
-	chip_id = cpu_to_chip_id(cpu);
-
-	if (chip_id >= 0) {
-		traverse_siblings_chip_id(cpu, add, chip_id);
-		return;
-	}
-
-	/* if the chip-id fails then group siblings by the L2 cache */
 	l2_cache = cpu_to_l2cache(cpu);
-	mask = add ? cpu_online_mask : cpu_present_mask;
-	for_each_cpu(i, mask) {
+	if (!l2_cache)
+		return false;
+
+	/* We're always related to ourself, but we might not be online yet */
+	set_cpus_related(cpu, cpu, onlining, mask_fn);
+
+	for_each_cpu(i, cpu_online_mask) {
+		/*
+		 * when updating the marks the current CPU has not been marked
+		 * online, but we need to update the cache masks
+		 */
 		np = cpu_to_l2cache(i);
 		if (!np)
 			continue;
 
 		if (np == l2_cache)
-			set_cpus_related(cpu, i, add, cpu_core_mask);
+			set_cpus_related(cpu, i, onlining, cpu_core_mask);
 
 		of_node_put(np);
 	}
 	of_node_put(l2_cache);
+
+	return true;
+}
+
+static void update_mask_by_thread(int cpu, bool onlining,
+		struct cpumask *(*mask_fn)(int))
+{
+	int base = cpu_first_thread_sibling(cpu);
+	int i;
+
+	for (i = 0; i < threads_per_core; i++) {
+		/*
+		 * Threads are onlined one by one. By the final time this
+		 * function is called for the core the sibling mask for each
+		 * thread will be complete, but we need to ensure that offline
+		 * threads aren't touched before they run start_secondary()
+		 */
+		if (cpu_is_offline(base + i) && (cpu != base + i))
+			continue;
+
+		set_cpus_related(cpu, base + i, onlining, cpu_sibling_mask);
+	}
+}
+
+static void update_cpu_masks(int cpu, bool onlining)
+{
+	int i;
+
+	update_mask_by_thread(cpu, onlining, cpu_sibling_mask);
+
+	/* now build the core mask */
+	for_each_cpu(i, cpu_sibling_mask(cpu))
+		set_cpus_related(cpu, i, onlining, cpu_core_mask);
+
+	if (update_core_mask_by_chip_id(cpu, onlining))
+		return;
+
+	if (update_core_mask_by_l2(cpu, onlining))
+		return;
+
 }
 
 /* Activate a secondary processor. */
 void start_secondary(void *unused)
 {
 	unsigned int cpu = smp_processor_id();
-	int i, base;
 
 	mmgrab(&init_mm);
 	current->active_mm = &init_mm;
@@ -722,19 +763,7 @@ void start_secondary(void *unused)
 	vdso_getcpu_init();
 #endif
 	/* Update sibling maps */
-	base = cpu_first_thread_sibling(cpu);
-	for (i = 0; i < threads_per_core; i++) {
-		if (cpu_is_offline(base + i) && (cpu != base + i))
-			continue;
-		set_cpus_related(cpu, base + i, true, cpu_sibling_mask);
-
-		/* cpu_core_map should be a superset of
-		 * cpu_sibling_map even if we don't have cache
-		 * information, so update the former here, too.
-		 */
-		set_cpus_related(cpu, base + i, true, cpu_core_mask);
-	}
-	traverse_core_siblings(cpu, true);
+	update_cpu_masks(cpu, true);
 
 	set_numa_node(numa_cpu_lookup_table[cpu]);
 	set_numa_mem(local_memory_node(numa_cpu_lookup_table[cpu]));
@@ -805,7 +834,6 @@ void __init smp_cpus_done(unsigned int max_cpus)
 int __cpu_disable(void)
 {
 	int cpu = smp_processor_id();
-	int base, i;
 	int err;
 
 	if (!smp_ops->cpu_disable)
@@ -816,12 +844,7 @@ int __cpu_disable(void)
 		return err;
 
 	/* Update sibling maps */
-	base = cpu_first_thread_sibling(cpu);
-	for (i = 0; i < threads_per_core && base + i < nr_cpu_ids; i++) {
-		set_cpus_related(cpu, base + i, false, cpu_sibling_mask);
-		set_cpus_related(cpu, base + i, false, cpu_core_mask);
-	}
-	traverse_core_siblings(cpu, false);
+	update_cpu_masks(cpu, false);
 
 	return 0;
 }
