@@ -672,7 +672,7 @@ static struct device_node *cpu_to_l2cache(int cpu)
 	return cache;
 }
 
-static bool update_core_mask_by_l2(int cpu, bool onlining)
+static bool update_mask_by_l2(int cpu, bool onlining, struct cpumask *(*mask_fn)(int))
 {
 	struct device_node *l2_cache, *np;
 	int i;
@@ -694,7 +694,7 @@ static bool update_core_mask_by_l2(int cpu, bool onlining)
 			continue;
 
 		if (np == l2_cache)
-			set_cpus_related(cpu, i, onlining, cpu_core_mask);
+			set_cpus_related(cpu, i, onlining, mask_fn);
 
 		of_node_put(np);
 	}
@@ -729,17 +729,18 @@ static void update_cpu_masks(int cpu, bool onlining)
 
 	update_mask_by_thread(cpu, onlining, cpu_sibling_mask);
 
-	/* now build the core mask */
+	/* now build the cache mask */
 	for_each_cpu(i, cpu_sibling_mask(cpu))
+		set_cpus_related(cpu, i, onlining, cpu_cache_mask);
+	update_mask_by_l2(cpu, onlining, cpu_cache_mask);
+
+	/* now build the core mask */
+	for_each_cpu(i, cpu_cache_mask(cpu))
 		set_cpus_related(cpu, i, onlining, cpu_core_mask);
-
-	if (update_core_mask_by_chip_id(cpu, onlining))
-		return;
-
-	if (update_core_mask_by_l2(cpu, onlining))
-		return;
-
+	update_core_mask_by_chip_id(cpu, onlining);
 }
+
+static bool shared_caches;
 
 /* Activate a secondary processor. */
 void start_secondary(void *unused)
@@ -769,6 +770,13 @@ void start_secondary(void *unused)
 #endif
 	/* Update sibling maps */
 	update_cpu_masks(cpu, true);
+
+	/*
+	 * Check for any shared caches. Note that this must be done on a
+	 * per-core basis because one core in the pair might be disabled.
+	 */
+	if (!cpumask_equal(cpu_cache_mask(cpu), cpu_sibling_mask(cpu)))
+		shared_caches = true;
 
 	set_numa_node(numa_cpu_lookup_table[cpu]);
 	set_numa_mem(local_memory_node(numa_cpu_lookup_table[cpu]));
@@ -811,6 +819,33 @@ static struct sched_domain_topology_level powerpc_topology[] = {
 	{ NULL, },
 };
 
+/*
+ * P9 has a slightly odd architecture where pairs of cores share an L2 cache.
+ * This topology makes it *much* cheaper to migrate tasks between adjacent cores
+ * since the migrated task remains cache hot. We want to take advantage of this
+ * at the scheduler level so an extra topology level is required.
+ */
+static int powerpc_shared_cache_flags(void)
+{
+	return SD_SHARE_PKG_RESOURCES;
+}
+
+/* this is kind of gross, but passing cpu_cache_mask directly
+ * causes the build to fail due to incompatible pointer types */
+static inline const struct cpumask *cpu_cache_mask_c(int cpu)
+{
+	return cpu_cache_mask(cpu);
+}
+
+static struct sched_domain_topology_level power9_topology[] = {
+#ifdef CONFIG_SCHED_SMT
+	{ cpu_smt_mask, powerpc_smt_flags, SD_INIT_NAME(SMT) },
+#endif
+	{ cpu_cache_mask_c, powerpc_shared_cache_flags, SD_INIT_NAME(CACHE) },
+	{ cpu_cpu_mask, SD_INIT_NAME(DIE) },
+	{ NULL, },
+};
+
 static __init long smp_setup_cpu_workfn(void *data __always_unused)
 {
 	smp_ops->setup_cpu(boot_cpuid);
@@ -832,7 +867,19 @@ void __init smp_cpus_done(unsigned int max_cpus)
 
 	dump_numa_cpu_topology();
 
-	set_sched_topology(powerpc_topology);
+	/*
+	 * If any CPU detects that it's sharing a cache with another CPU then
+	 * use the deeper topology that is aware of this sharing.
+	 */
+	if (shared_caches) {
+		pr_info("Using shared cache scheduler topology\n");
+		set_sched_topology(power9_topology);
+		/* HACK: warn if we're using this on anything by P9 */
+		WARN_ON((mfspr(SPRN_PVR) & 0xffffff00) != 0x004e0100);
+	} else {
+		pr_info("Using standard scheduler topology\n");
+		set_sched_topology(powerpc_topology);
+	}
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
