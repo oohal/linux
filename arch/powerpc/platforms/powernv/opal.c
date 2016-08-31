@@ -749,6 +749,7 @@ static int __init opal_init(void)
 
 	/* Initialise platform device: oppanel interface */
 	opal_pdev_init("ibm,opal-oppanel");
+	opal_pdev_init("ibm,contutto-nvmem");
 
 	/* Initialise OPAL kmsg dumper for flushing console on panic */
 	opal_kmsg_init();

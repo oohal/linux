@@ -3,6 +3,7 @@ obj-$(CONFIG_BLK_DEV_PMEM) += nd_pmem.o
 obj-$(CONFIG_ND_BTT) += nd_btt.o
 obj-$(CONFIG_ND_BLK) += nd_blk.o
 obj-$(CONFIG_X86_PMEM_LEGACY) += nd_e820.o
+obj-$(CONFIG_CONTUTTO) += nd_contutto.o
 
 nd_pmem-y := pmem.o
 
@@ -11,6 +12,8 @@ nd_btt-y := btt.o
 nd_blk-y := blk.o
 
 nd_e820-y := e820.o
+
+nd_contutto-y := contutto.o
 
 libnvdimm-y := core.o
 libnvdimm-y += bus.o
