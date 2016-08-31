@@ -101,4 +101,10 @@ config NVDIMM_DAX
 
 	  Select Y if unsure
 
+config CONTUTTO
+       tristate "Experimental Contutto pmem driver"
+       default LIBNVDIMM
+       depends on PPC_POWERNV
+       depends on BLK_DEV
+
 endif
