@@ -37,6 +37,8 @@
 #define _PAGE_SOFT_DIRTY	0x00000
 #endif
 #define _PAGE_SPECIAL		_RPAGE_SW2 /* software: special page */
+#define _PAGE_DEVMAP		_RPAGE_SW1
+#define __HAVE_ARCH_PTE_DEVMAP
 
 /*
  * For P9 DD1 only, we need to track whether the pte's huge.
@@ -433,6 +435,7 @@ static inline int pte_present(pte_t pte)
 {
 	return !!(pte_raw(pte) & cpu_to_be64(_PAGE_PRESENT));
 }
+
 /*
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
@@ -493,6 +496,16 @@ static inline pte_t pte_mkspecial(pte_t pte)
 static inline pte_t pte_mkhuge(pte_t pte)
 {
 	return pte;
+}
+
+static inline pte_t pte_mkdevmap(pte_t pte)
+{
+	return __pte(pte_val(pte) | _PAGE_SPECIAL|_PAGE_DEVMAP);
+}
+
+static inline int pte_devmap(pte_t pte)
+{
+	return !!(pte_raw(pte) & cpu_to_be64(_PAGE_DEVMAP));
 }
 
 static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
@@ -1030,13 +1043,27 @@ static inline int pmd_move_must_withdraw(struct spinlock *new_pmd_ptl,
 	return true;
 }
 
-
 #define arch_needs_pgtable_deposit arch_needs_pgtable_deposit
 static inline bool arch_needs_pgtable_deposit(void)
 {
+#ifdef CONFIG_ARCH_HAS_PMEM_API
+	/* HACK: replace this with something less awful */
+	return true;
+#else
 	if (radix_enabled())
 		return false;
 	return true;
+#endif
+}
+
+static inline pmd_t pmd_mkdevmap(pmd_t pmd)
+{
+	return pte_pmd(pte_mkdevmap(pmd_pte(pmd)));
+}
+
+static inline int pmd_devmap(pmd_t pmd)
+{
+	return pte_devmap(pmd_pte(pmd));
 }
 
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
