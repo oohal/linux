@@ -288,6 +288,50 @@ static long native_hpte_remove(unsigned long hpte_group)
 	return i;
 }
 
+static int native_hpte_removebolted(unsigned long ea, int psize, int ssize)
+{
+
+	int i, shift;
+	struct hash_pte *hptep;
+	unsigned long vpn, vsid;
+	unsigned long hpte_v, want_v;
+	unsigned long hash, hpte_group;
+
+	vsid = get_kernel_vsid(ea, ssize);
+	vpn = hpt_vpn(ea, vsid, ssize);
+
+	shift = mmu_psize_defs[psize].shift;
+	hash = hpt_hash(vpn, shift, ssize);
+	want_v = hpte_encode_avpn(vpn, psize, ssize);
+
+	hpte_group = ((hash & htab_hash_mask) * HPTES_PER_GROUP) & ~0x7UL;
+	DBG_LOW("    removebolted(group=%lx)\n", hpte_group);
+
+	for (i = 0; i < HPTES_PER_GROUP; i++) {
+		hptep = htab_address + hpte_group + i;
+		hpte_v = be64_to_cpu(hptep->v);
+
+		if (!HPTE_V_COMPARE(hpte_v, want_v) || !(hpte_v & HPTE_V_VALID))
+			continue;
+
+		/* retry with lock held */
+		native_lock_hpte(hptep);
+		hpte_v = be64_to_cpu(hptep->v);
+
+		if (HPTE_V_COMPARE(hpte_v, want_v) && (hpte_v & HPTE_V_VALID))
+				break;
+		native_unlock_hpte(hptep);
+	}
+
+	if (i == HPTES_PER_GROUP)
+		return -ENOENT;
+
+	/* Invalidate the hpte. NOTE: this also unlocks it */
+	hptep->v = 0;
+	return 0;
+}
+
+
 static long native_hpte_updatepp(unsigned long slot, unsigned long newpp,
 				 unsigned long vpn, int bpsize,
 				 int apsize, int ssize, unsigned long flags)
@@ -724,6 +768,7 @@ void __init hpte_init_native(void)
 	mmu_hash_ops.hpte_updateboltedpp = native_hpte_updateboltedpp;
 	mmu_hash_ops.hpte_insert	= native_hpte_insert;
 	mmu_hash_ops.hpte_remove	= native_hpte_remove;
+	mmu_hash_ops.hpte_removebolted  = native_hpte_removebolted;
 	mmu_hash_ops.hpte_clear_all	= native_hpte_clear;
 	mmu_hash_ops.flush_hash_range = native_flush_hash_range;
 	mmu_hash_ops.hugepage_invalidate   = native_hugepage_invalidate;
