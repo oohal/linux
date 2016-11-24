@@ -941,11 +941,11 @@ void nvdimm_flush(struct nd_region *nd_region)
 	 * writes to avoid the cache via arch_memcpy_to_pmem().  The
 	 * final wmb() ensures ordering for the NVDIMM flush write.
 	 */
-	wmb();
+	mb();
 	for (i = 0; i < nd_region->ndr_mappings; i++)
 		if (ndrd_get_flush_wpq(ndrd, i, 0))
-			writeq(1, ndrd_get_flush_wpq(ndrd, i, idx));
-	wmb();
+			readq(ndrd_get_flush_wpq(ndrd, i, idx));
+	mb();
 }
 EXPORT_SYMBOL_GPL(nvdimm_flush);
 
