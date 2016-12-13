@@ -436,8 +436,13 @@ static int __dax_dev_fault(struct dax_dev *dax_dev, struct vm_area_struct *vma,
 		return VM_FAULT_SIGBUS;
 
 	dax_region = dax_dev->region;
+	/*
+	 * XXX: Why do we fail if the alignment is > PAGE_SIZE? Shouldn't we hit this
+	 * path when THP is off?
+	 */
 	if (dax_region->align > PAGE_SIZE) {
-		dev_dbg(dev, "%s: alignment > fault size\n", __func__);
+		dev_dbg(dev, "%s: alignment (%#llx) > fault size (%#llx)\n", __func__,
+			dax_region->align, PAGE_SIZE);
 		return VM_FAULT_SIGBUS;
 	}
 

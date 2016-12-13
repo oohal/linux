@@ -18,7 +18,7 @@
  * 2 of the License, or (at your option) any later version.
  */
 
-#undef DEBUG
+#define DEBUG
 #undef DEBUG_LOW
 
 #include <linux/spinlock.h>
