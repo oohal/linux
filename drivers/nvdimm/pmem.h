@@ -7,7 +7,9 @@
 
 #ifdef CONFIG_ARCH_HAS_PMEM_API
 #include <asm/pmem.h>
+#define ARCH_MEMREMAP_PMEM MEMREMAP_WB
 #else
+#define ARCH_MEMREMAP_PMEM MEMREMAP_WT
 static inline void arch_wb_cache_pmem(void *addr, size_t size)
 {
 }
