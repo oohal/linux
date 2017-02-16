@@ -443,6 +443,9 @@ static int __dax_dev_pmd_fault(struct dax_dev *dax_dev,
 	pgoff_t pgoff;
 	pfn_t pfn;
 
+	/* HACK: Force PTE faults until we sort out DAX PMD business */
+	return VM_FAULT_FALLBACK;
+
 	if (check_vma(dax_dev, vma, __func__))
 		return VM_FAULT_SIGBUS;
 

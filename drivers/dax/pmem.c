@@ -70,6 +70,7 @@ static int dax_pmem_probe(struct device *dev)
 	struct nd_dax *nd_dax = to_nd_dax(dev);
 	struct nd_pfn *nd_pfn = &nd_dax->nd_pfn;
 	struct vmem_altmap __altmap, *altmap = NULL;
+	unsigned int align;
 
 	ndns = nvdimm_namespace_common_probe(dev);
 	if (IS_ERR(ndns))
@@ -119,9 +120,12 @@ static int dax_pmem_probe(struct device *dev)
 	/* adjust the dax_region resource to the start of data */
 	res.start += le64_to_cpu(pfn_sb->dataoff);
 
+	align = le32_to_cpu(pfn_sb->align);
+	align = PAGE_SIZE; /* HACK: Force this until DAX PMD is working */
+
 	nd_region = to_nd_region(dev->parent);
 	dax_region = alloc_dax_region(dev, nd_region->id, &res,
-			le32_to_cpu(pfn_sb->align), addr, PFN_DEV|PFN_MAP);
+			align, addr, PFN_DEV|PFN_MAP);
 	if (!dax_region)
 		return -ENOMEM;
 
