@@ -15,4 +15,8 @@
 struct dax_device;
 struct dax_device *inode_dax(struct inode *inode);
 struct inode *dax_inode(struct dax_device *dax_dev);
+
+/* Start of our claimed range */
+#define IOC_DAX_SIZE _IO(0xCA, 0x90)
+
 #endif /* __DAX_H__ */

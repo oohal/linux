@@ -148,17 +148,21 @@ static struct dev_dax *to_dev_dax(struct device *dev)
 	return container_of(dev, struct dev_dax, dev);
 }
 
-static ssize_t size_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static unsigned long long dax_dev_size(struct dev_dax *dev_dax)
 {
-	struct dev_dax *dev_dax = to_dev_dax(dev);
 	unsigned long long size = 0;
 	int i;
 
 	for (i = 0; i < dev_dax->num_resources; i++)
 		size += resource_size(&dev_dax->res[i]);
 
-	return sprintf(buf, "%llu\n", size);
+	return size;
+}
+
+static ssize_t size_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%llu\n", dax_dev_size(to_dev_dax(dev)));
 }
 static DEVICE_ATTR_RO(size);
 
@@ -514,6 +518,21 @@ static int dax_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+static long dax_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
+{
+	void __user *output = (void __user *)arg;
+	unsigned long size;
+
+	if (cmd != IOC_DAX_SIZE)
+		return -EINVAL;
+
+	size = dax_dev_size(f->private_data);
+	if (copy_to_user(output, &size, sizeof(size)))
+		return -EFAULT;
+
+	return 0;
+}
+
 static const struct file_operations dax_fops = {
 	.llseek = noop_llseek,
 	.owner = THIS_MODULE,
@@ -521,6 +540,7 @@ static const struct file_operations dax_fops = {
 	.release = dax_release,
 	.get_unmapped_area = dax_get_unmapped_area,
 	.mmap = dax_mmap,
+	.unlocked_ioctl = dax_ioctl,
 };
 
 static void dev_dax_release(struct device *dev)
