@@ -22,4 +22,8 @@ struct dax_region *alloc_dax_region(struct device *parent,
 		void *addr, unsigned long flags);
 struct dax_dev *devm_create_dax_dev(struct dax_region *dax_region,
 		struct resource *res, int count);
+
+/* Start of our claimed range */
+#define IOC_DAX_SIZE _IO(0xCA, 0x90)
+
 #endif /* __DAX_H__ */
