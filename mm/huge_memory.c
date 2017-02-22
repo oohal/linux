@@ -1412,6 +1412,10 @@ static inline void zap_deposited_table(struct mm_struct *mm, pmd_t *pmd)
 {
 	pgtable_t pgtable;
 
+	/* for DAX PMDs no deposit exists */
+	if (pmd_devmap(*pmd))
+		return;
+
 	pgtable = pgtable_trans_huge_withdraw(mm, pmd);
 	pte_free(mm, pgtable);
 	atomic_long_dec(&mm->nr_ptes);
@@ -1491,6 +1495,9 @@ bool move_huge_pmd(struct vm_area_struct *vma, unsigned long old_addr,
 	pmd_t pmd;
 	struct mm_struct *mm = vma->vm_mm;
 	bool force_flush = false;
+
+	/* HACK: DAX PMDs should never be moved */
+	VM_BUG_ON(vma_is_dax(vma));
 
 	if ((old_addr & ~HPAGE_PMD_MASK) ||
 	    (new_addr & ~HPAGE_PMD_MASK) ||
