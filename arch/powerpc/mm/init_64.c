@@ -19,7 +19,7 @@
  *
  */
 
-#define DEBUG
+#undef DEBUG
 
 #include <linux/signal.h>
 #include <linux/sched.h>
