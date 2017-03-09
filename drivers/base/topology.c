@@ -65,6 +65,10 @@ define_siblings_show_func(thread_siblings, sibling_cpumask);
 static DEVICE_ATTR_RO(thread_siblings);
 static DEVICE_ATTR_RO(thread_siblings_list);
 
+define_siblings_show_func(cache_siblings, cache_cpumask);
+static DEVICE_ATTR_RO(cache_siblings);
+static DEVICE_ATTR_RO(cache_siblings_list);
+
 define_siblings_show_func(core_siblings, core_cpumask);
 static DEVICE_ATTR_RO(core_siblings);
 static DEVICE_ATTR_RO(core_siblings_list);
@@ -90,6 +94,10 @@ static struct attribute *default_attrs[] = {
 	&dev_attr_core_id.attr,
 	&dev_attr_thread_siblings.attr,
 	&dev_attr_thread_siblings_list.attr,
+
+	&dev_attr_cache_siblings.attr,
+	&dev_attr_cache_siblings_list.attr,
+
 	&dev_attr_core_siblings.attr,
 	&dev_attr_core_siblings_list.attr,
 #ifdef CONFIG_SCHED_BOOK
