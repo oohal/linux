@@ -18,7 +18,6 @@ EXPORT_SYMBOL(csum_partial_copy_generic);
 #endif
 
 EXPORT_SYMBOL(__copy_tofrom_user);
-EXPORT_SYMBOL(__copy_tofrom_user_power7_pmem);
 EXPORT_SYMBOL(__clear_user);
 EXPORT_SYMBOL(copy_page);
 

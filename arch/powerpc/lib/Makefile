@@ -34,6 +34,4 @@ obj-$(CONFIG_FTR_FIXUP_SELFTEST) += feature-fixups-test.o
 obj-$(CONFIG_ALTIVEC)	+= xor_vmx.o
 CFLAGS_xor_vmx.o += -maltivec $(call cc-option,-mabi=altivec)
 
-obj64-y += copyuser_pmem.o
-
 obj-$(CONFIG_PPC64) += $(obj64-y)

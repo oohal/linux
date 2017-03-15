@@ -61,7 +61,7 @@ static inline void arch_memcpy_to_pmem(void *dst, const void *src, size_t n)
 	 * fault) we would have already reported a general protection fault
 	 * before the WARN+BUG.
 	 */
-	unwritten = __copy_from_user_pmem(dst, (void __user *) src, n);
+	unwritten = __copy_from_user_inatomic(dst, (void __user *) src, n);
 	if (WARN(unwritten, "%s: fault copying %p <- %p unwritten: %d\n",
 				__func__, dst, src, unwritten))
 		BUG();

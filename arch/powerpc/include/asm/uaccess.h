@@ -303,8 +303,6 @@ do {								\
 extern unsigned long __copy_tofrom_user(void __user *to,
 		const void __user *from, unsigned long size);
 
-extern unsigned long __copy_tofrom_user_power7_pmem(void __user *to,
-		const void __user *from, unsigned long size);
 #ifndef __powerpc64__
 
 static inline unsigned long copy_from_user(void *to,
@@ -369,35 +367,6 @@ static inline unsigned long __copy_from_user_inatomic(void *to,
 	check_object_size(to, n, false);
 
 	return __copy_tofrom_user((__force void __user *)to, from, n);
-}
-
-static inline unsigned long __copy_from_user_pmem(void *to,
-		const void __user *from, unsigned long n)
-{
-	if (__builtin_constant_p(n) && (n <= 8)) {
-		unsigned long ret = 1;
-
-		switch (n) {
-		case 1:
-			__get_user_size(*(u8 *)to, from, 1, ret);
-			break;
-		case 2:
-			__get_user_size(*(u16 *)to, from, 2, ret);
-			break;
-		case 4:
-			__get_user_size(*(u32 *)to, from, 4, ret);
-			break;
-		case 8:
-			__get_user_size(*(u64 *)to, from, 8, ret);
-			break;
-		}
-		if (ret == 0)
-			return 0;
-	}
-
-	check_object_size(to, n, false);
-
-	return __copy_tofrom_user_power7_pmem((__force void __user *)to, from, n);
 }
 
 static inline unsigned long __copy_to_user_inatomic(void __user *to,
