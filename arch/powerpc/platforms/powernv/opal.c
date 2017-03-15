@@ -685,7 +685,7 @@ static void opal_init_heartbeat(void)
 
 static int __init opal_init(void)
 {
-	struct device_node *np, *consoles, *leds;
+	struct device_node *np, *consoles, *leds, *nvmem;
 	int rc;
 
 	opal_node = of_find_node_by_path("/ibm,opal");
@@ -759,7 +759,16 @@ static int __init opal_init(void)
 
 	/* Initialise platform device: oppanel interface */
 	opal_pdev_init(opal_node, "ibm,opal-oppanel");
+
+	/*
+	 * Init any nonvolatile memory nodes. Older Contutto firmware
+	 * places them on the root bus and newer firmwares place them
+	 * under /nonvolatile-memory/ We need to handle both.
+	 */
 	opal_pdev_init(of_root, "ibm,contutto-nvmem");
+	nvmem = of_find_node_by_path("/nonvolatile-memory");
+	if (nvmem)
+		opal_pdev_init(nvmem, "ibm,contutto-nvmem");
 
 	/* Initialise OPAL kmsg dumper for flushing console on panic */
 	opal_kmsg_init();
