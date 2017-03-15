@@ -19,6 +19,8 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 
+#include "dax.h"
+
 static int dax_major;
 static struct class *dax_class;
 static DEFINE_IDA(dax_minor_ida);
@@ -116,17 +118,21 @@ struct dax_region *alloc_dax_region(struct device *parent, int region_id,
 }
 EXPORT_SYMBOL_GPL(alloc_dax_region);
 
-static ssize_t size_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static unsigned long long dax_dev_size(struct dax_dev *dax_dev)
 {
-	struct dax_dev *dax_dev = dev_get_drvdata(dev);
 	unsigned long long size = 0;
 	int i;
 
 	for (i = 0; i < dax_dev->num_resources; i++)
 		size += resource_size(&dax_dev->res[i]);
 
-	return sprintf(buf, "%llu\n", size);
+	return size;
+}
+
+static ssize_t size_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%llu\n", dax_dev_size(dev_get_drvdata(dev)));
 }
 static DEVICE_ATTR_RO(size);
 
@@ -536,6 +542,21 @@ static int dax_dev_mmap(struct file *filp, struct vm_area_struct *vma)
 
 }
 
+static long dax_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
+{
+	void __user *output = (void __user *)arg;
+	unsigned long size;
+
+	if (cmd != IOC_DAX_SIZE)
+		return -EINVAL;
+
+	size = dax_dev_size(f->private_data);
+	if (copy_to_user(output, &size, sizeof(size)))
+		return -EFAULT;
+
+	return 0;
+}
+
 static const struct file_operations dax_fops = {
 	.llseek = noop_llseek,
 	.owner = THIS_MODULE,
@@ -543,6 +564,7 @@ static const struct file_operations dax_fops = {
 	.release = dax_dev_release,
 	.get_unmapped_area = dax_dev_get_unmapped_area,
 	.mmap = dax_dev_mmap,
+	.unlocked_ioctl = dax_ioctl,
 };
 
 static int __init dax_init(void)
