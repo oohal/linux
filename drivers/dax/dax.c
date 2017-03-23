@@ -73,6 +73,7 @@ struct dax_dev {
 	bool alive;
 	int id;
 	int num_resources;
+	struct rw_semaphore sem;
 	struct resource res[0];
 };
 
@@ -578,7 +579,9 @@ static int dax_dev_huge_fault(struct vm_fault *vmf,
 			? "write" : "read",
 			vmf->vma->vm_start, vmf->vma->vm_end);
 
-	rcu_read_lock();
+	if (!dax_dev->alive || !down_read_trylock(&dax_dev->sem))
+		return VM_FAULT_SIGBUS;
+
 	switch (pe_size) {
 	case PE_SIZE_PTE:
 		rc = __dax_dev_pte_fault(dax_dev, vmf);
@@ -592,7 +595,7 @@ static int dax_dev_huge_fault(struct vm_fault *vmf,
 	default:
 		return VM_FAULT_FALLBACK;
 	}
-	rcu_read_unlock();
+	up_read(&dax_dev->sem);
 
 	return rc;
 }
@@ -716,8 +719,12 @@ static void unregister_dax_dev(void *dev)
 	 * that start after synchronize_rcu() has started will abort
 	 * upon seeing dax_dev->alive == false.
 	 */
+
+	/* take the write lock and kill the device to flush out fault handlers */
+	down_write(&dax_dev->sem);
 	dax_dev->alive = false;
-	synchronize_rcu();
+	up_write(&dax_dev->sem);
+
 	unmap_mapping_range(dax_dev->inode->i_mapping, 0, 0, 1);
 	cdev_del(cdev);
 	device_unregister(dev);
@@ -783,6 +790,7 @@ struct dax_dev *devm_create_dax_dev(struct dax_region *dax_region,
 		goto err_cdev;
 
 	/* from here on we're committed to teardown via dax_dev_release() */
+	init_rwsem(&dax_dev->sem);
 	dax_dev->num_resources = count;
 	dax_dev->alive = true;
 	dax_dev->region = dax_region;
