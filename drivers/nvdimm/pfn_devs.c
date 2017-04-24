@@ -260,6 +260,33 @@ static ssize_t size_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(size);
 
+static ssize_t supported_alignments_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	/*
+	 * This needs to be a local variable because the *_SIZE macros
+	 * aren't always constants.
+	 */
+	unsigned long supported_alignments[] = {
+		PAGE_SIZE,
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+		HPAGE_PMD_SIZE,
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+		HPAGE_PUD_SIZE,
+#endif
+#endif
+		0,
+	};
+
+	return nd_sector_size_show(0, supported_alignments, buf);
+}
+DEVICE_ATTR_RO(supported_alignments);
+
+static struct attribute *nd_dax_attributes[] = {
+	&dev_attr_supported_alignments.attr,
+	NULL,
+};
+
 static struct attribute *nd_pfn_attributes[] = {
 	&dev_attr_mode.attr,
 	&dev_attr_namespace.attr,
@@ -267,6 +294,7 @@ static struct attribute *nd_pfn_attributes[] = {
 	&dev_attr_align.attr,
 	&dev_attr_resource.attr,
 	&dev_attr_size.attr,
+	&dev_attr_supported_alignments.attr,
 	NULL,
 };
 
