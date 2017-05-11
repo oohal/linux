@@ -17,6 +17,9 @@
 #include <linux/memblock.h>
 #include <linux/bootmem.h>
 #include <linux/moduleparam.h>
+#include <linux/of.h>
+#include <linux/printk.h>
+
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
 #include <asm/tlb.h>
@@ -650,6 +653,55 @@ static int __init hugepage_setup_sz(char *str)
 }
 __setup("hugepagesz=", hugepage_setup_sz);
 
+#ifdef CONFIG_PPC_PSERIES
+static void __init do_gpage_init(void)
+{
+	struct device_node *node;
+
+	for_each_node_with_property(node, "ibm,expected#pages") {
+		u64 reg[2];
+		u64 largest = 0;
+		u64 backing_page_size;
+		u32 pages;
+		int rc = 0;
+		struct hstate *h;
+
+		rc |= of_property_read_u64_array(node, "reg", reg, 2);
+		rc |= of_property_read_u32(node, "ibm,expected#pages", &pages);
+
+		if (rc) {
+			of_node_put(node);
+			continue;
+		}
+
+		backing_page_size = reg[1] / pages;
+
+		pr_info("backing page size: %llx\n", reg[1] / pages);
+
+		/* we need a huge size that's a multiple of the backing size */
+		for_each_hstate(h) {
+			unsigned long hsize = huge_page_size(h);
+
+			if (!hstate_is_gigantic(h))
+				continue;
+
+			if (backing_page_size % hsize)
+				continue;
+
+			if (hsize > largest)
+				largest = hsize;
+		}
+
+		if (largest)
+			hugetlb_hstate_donate_gigantic(size_to_hstate(largest),
+				reg[0], reg[1] / largest);
+		else
+			pr_warn("Unable to find hugepage size to map %s\n",
+				node->name);
+	}
+}
+#endif
+
 struct kmem_cache *hugepte_cache;
 static int __init hugetlbpage_init(void)
 {
@@ -719,6 +771,12 @@ static int __init hugetlbpage_init(void)
 	else if (mmu_psize_defs[MMU_PAGE_2M].shift)
 		HPAGE_SHIFT = mmu_psize_defs[MMU_PAGE_2M].shift;
 #endif
+
+#ifdef CONFIG_PPC_PSERIES
+	/* these nodes were reserved at boot, fill them out here */
+	do_gpage_init();
+#endif
+
 	return 0;
 }
 

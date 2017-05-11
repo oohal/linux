@@ -473,48 +473,6 @@ static int __init htab_dt_scan_page_sizes(unsigned long node,
 	return 1;
 }
 
-#ifdef CONFIG_HUGETLB_PAGE
-/* Scan for 16G memory blocks that have been set aside for huge pages
- * and reserve those blocks for 16G huge pages.
- */
-static int __init htab_dt_scan_hugepage_blocks(unsigned long node,
-					const char *uname, int depth,
-					void *data) {
-	const char *type = of_get_flat_dt_prop(node, "device_type", NULL);
-	const __be64 *addr_prop;
-	const __be32 *page_count_prop;
-	unsigned int expected_pages;
-	long unsigned int phys_addr;
-	long unsigned int block_size;
-
-	/* We are scanning "memory" nodes only */
-	if (type == NULL || strcmp(type, "memory") != 0)
-		return 0;
-
-	/* This property is the log base 2 of the number of virtual pages that
-	 * will represent this memory block. */
-	page_count_prop = of_get_flat_dt_prop(node, "ibm,expected#pages", NULL);
-	if (page_count_prop == NULL)
-		return 0;
-	expected_pages = (1 << be32_to_cpu(page_count_prop[0]));
-	addr_prop = of_get_flat_dt_prop(node, "reg", NULL);
-	if (addr_prop == NULL)
-		return 0;
-	phys_addr = be64_to_cpu(addr_prop[0]);
-	block_size = be64_to_cpu(addr_prop[1]);
-	if (block_size != (16 * GB))
-		return 0;
-	printk(KERN_INFO "Huge page(16GB) memory: "
-			"addr = 0x%lX size = 0x%lX pages = %d\n",
-			phys_addr, block_size, expected_pages);
-	if (phys_addr + (16 * GB) <= memblock_end_of_DRAM()) {
-		memblock_reserve(phys_addr, block_size * expected_pages);
-		add_gpage(phys_addr, block_size, expected_pages);
-	}
-	return 0;
-}
-#endif /* CONFIG_HUGETLB_PAGE */
-
 static void mmu_psize_set_default_penc(void)
 {
 	int bpsize, apsize;
@@ -565,11 +523,6 @@ static void __init htab_scan_page_sizes(void)
 		memcpy(mmu_psize_defs, mmu_psize_defaults_gp,
 		       sizeof(mmu_psize_defaults_gp));
 	}
-
-#ifdef CONFIG_HUGETLB_PAGE
-	/* Reserve 16G huge page memory sections for huge pages */
-	of_scan_flat_dt(htab_dt_scan_hugepage_blocks, NULL);
-#endif /* CONFIG_HUGETLB_PAGE */
 }
 
 /*

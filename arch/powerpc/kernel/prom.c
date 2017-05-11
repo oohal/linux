@@ -656,6 +656,48 @@ static void __init early_reserve_mem(void)
 #endif
 }
 
+#if defined(CONFIG_HUGETLB_PAGE) && defined(CONFIG_PPC_PSERIES)
+/*
+ * Scan for memory blocks that have been set aside by the hypervisor
+ * to support 16G page mappings. On hash we have 16G pages while on
+ * radix only have 1G so we just reserve the memory here and defer
+ * handing it to hugetlbfs until after the MMU has been initialised.
+ */
+int __init dt_scan_hugepage_blocks(unsigned long node,
+					const char *uname, int depth,
+					void *data) {
+	const __be32 *page_count_prop;
+	const __be64 *addr_prop;
+	long unsigned int base;
+	long unsigned int len;
+	const char *type;
+
+	/* We are scanning "memory" nodes only */
+	type = of_get_flat_dt_prop(node, "device_type", NULL);
+	if (type == NULL || strcmp(type, "memory") != 0)
+		return 0;
+
+	/*
+	 * ibm,expected#pages indicates the contigious size of the memory
+	 * backing this reservation and is only set for hypervisor reserved
+	 * hugepage regions.
+	 */
+	addr_prop = of_get_flat_dt_prop(node, "reg", NULL);
+	page_count_prop = of_get_flat_dt_prop(node, "ibm,expected#pages", NULL);
+	if (!page_count_prop || !addr_prop)
+		return 0;
+
+	base = be64_to_cpu(addr_prop[0]);
+	len = be64_to_cpu(addr_prop[1]);
+	pr_info("Huge memory reserve: addr = 0x%lX size = 0x%lX\n", base, len);
+
+	if (base + len <= memblock_end_of_DRAM())
+		memblock_reserve(base, len);
+
+	return 0;
+}
+#endif
+
 void __init early_init_devtree(void *params)
 {
 	phys_addr_t limit;
@@ -690,6 +732,11 @@ void __init early_init_devtree(void *params)
 	/* Scan memory nodes and rebuild MEMBLOCKs */
 	of_scan_flat_dt(early_init_dt_scan_root, NULL);
 	of_scan_flat_dt(early_init_dt_scan_memory_ppc, NULL);
+
+#ifdef CONFIG_PPC_PSERIES
+	/* Reserve hypervisor hugepage allocations */
+	of_scan_flat_dt(dt_scan_hugepage_blocks, NULL);
+#endif
 
 	parse_early_param();
 
