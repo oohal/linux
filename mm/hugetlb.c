@@ -24,6 +24,7 @@
 #include <linux/swapops.h>
 #include <linux/page-isolation.h>
 #include <linux/jhash.h>
+#include <linux/memblock.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -2108,29 +2109,30 @@ struct page *alloc_huge_page_noerr(struct vm_area_struct *vma,
 
 int __weak alloc_bootmem_huge_page(struct hstate *h)
 {
+	unsigned long size = huge_page_size(h);
 	struct huge_bootmem_page *m;
 	int nr_nodes, node;
+	phys_addr_t phys;
 
 	for_each_node_mask_to_alloc(h, nr_nodes, node, &node_states[N_MEMORY]) {
-		void *addr;
+		phys = memblock_alloc_base_nid(size, size,
+			MEMBLOCK_ALLOC_ANYWHERE, node, 0);
+		if (!phys)
+			continue;
 
-		addr = memblock_virt_alloc_try_nid_nopanic(
-				huge_page_size(h), huge_page_size(h),
-				0, BOOTMEM_ALLOC_ACCESSIBLE, node);
-		if (addr) {
-			/*
-			 * Use the beginning of the huge page to store the
-			 * huge_bootmem_page struct (until gather_bootmem
-			 * puts them into the mem_map).
-			 */
-			m = addr;
+#ifdef CONFIG_HIGHMEM
+		m = memblock_virt_alloc(sizeof(*m), 0); /* panics on failure */
+		m->phys = phys;
+#else
+		m = phys_to_virt(phys);
+#endif
+		if (m)
 			goto found;
-		}
 	}
 	return 0;
 
 found:
-	BUG_ON(!IS_ALIGNED(virt_to_phys(m), huge_page_size(h)));
+	BUG_ON(!IS_ALIGNED(phys, huge_page_size(h)));
 	/* Put them into a private list first because mem_map is not up yet */
 	list_add(&m->list, &huge_boot_pages);
 	m->hstate = h;
