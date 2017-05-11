@@ -36,12 +36,6 @@
 
 unsigned int HPAGE_SHIFT;
 
-#ifdef CONFIG_PPC_PSERIES
-#define MAX_NUMBER_GPAGES	1024
-static u64 gpage_freearray[MAX_NUMBER_GPAGES];
-static unsigned nr_gpages;
-#endif
-
 #define hugepd_none(hpd)	(hpd_val(hpd) == 0)
 
 pte_t *huge_pte_offset(struct mm_struct *mm, unsigned long addr)
@@ -195,39 +189,6 @@ pte_t *huge_pte_alloc(struct mm_struct *mm, unsigned long addr, unsigned long sz
 
 	return hugepte_offset(*hpdp, addr, pdshift);
 }
-
-#ifdef CONFIG_PPC_PSERIES
-
-/* Build list of addresses of gigantic pages.  This function is used in early
- * boot before the buddy allocator is setup.
- */
-void add_gpage(u64 addr, u64 page_size, unsigned long number_of_pages)
-{
-	if (!addr)
-		return;
-	while (number_of_pages > 0) {
-		gpage_freearray[nr_gpages] = addr;
-		nr_gpages++;
-		number_of_pages--;
-		addr += page_size;
-	}
-}
-
-/* Moves the gigantic page addresses from the temporary list to the
- * huge_boot_pages list.
- */
-int alloc_bootmem_huge_page(struct hstate *hstate)
-{
-	struct huge_bootmem_page *m;
-	if (nr_gpages == 0)
-		return 0;
-	m = phys_to_virt(gpage_freearray[--nr_gpages]);
-	gpage_freearray[nr_gpages] = 0;
-	list_add(&m->list, &huge_boot_pages);
-	m->hstate = hstate;
-	return 1;
-}
-#endif
 
 #if defined(CONFIG_PPC_FSL_BOOK3E) || defined(CONFIG_PPC_8xx)
 #define HUGEPD_FREELIST_SIZE \
