@@ -2107,7 +2107,7 @@ struct page *alloc_huge_page_noerr(struct vm_area_struct *vma,
 	return page;
 }
 
-int __weak alloc_bootmem_huge_page(struct hstate *h)
+static int alloc_bootmem_huge_page(struct hstate *h)
 {
 	unsigned long size = huge_page_size(h);
 	struct huge_bootmem_page *m;

@@ -346,9 +346,6 @@ struct page *alloc_huge_page_noerr(struct vm_area_struct *vma,
 int huge_add_to_page_cache(struct page *page, struct address_space *mapping,
 			pgoff_t idx);
 
-/* arch callback */
-int __init alloc_bootmem_huge_page(struct hstate *h);
-
 void __init hugetlb_bad_size(void);
 void __init hugetlb_add_hstate(unsigned order);
 void __init hugetlb_hstate_donate_gigantic(struct hstate *h,
