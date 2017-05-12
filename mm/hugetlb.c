@@ -2152,18 +2152,32 @@ static void __init prep_compound_huge_page(struct page *page,
 static void __init gather_bootmem_prealloc(void)
 {
 	struct huge_bootmem_page *m, *prev;
+	struct hstate *h;
 
 	list_for_each_entry_safe(m, prev, &huge_boot_pages, list) {
-		struct hstate *h = m->hstate;
 		struct page *page;
+		phys_addr_t phys;
+
+		h = m->hstate;
 
 #ifdef CONFIG_HIGHMEM
 		page = pfn_to_page(m->phys >> PAGE_SHIFT);
+		phys = m->phys;
 		memblock_free_late(__pa(m),
 				   sizeof(struct huge_bootmem_page));
 #else
 		page = virt_to_page(m);
+		phys = virt_to_phys(m);
 #endif
+		/*
+		 * If the system has provided some hugepage memory and
+		 * the administrator has limited the number.
+		 */
+		if (h->nr_huge_pages >= h->max_huge_pages) {
+			memblock_free_late(phys, huge_page_size(h));
+			continue;
+		}
+
 		WARN_ON(page_count(page) != 1);
 		prep_compound_huge_page(page, h->order);
 		WARN_ON(PageReserved(page));
@@ -2179,11 +2193,49 @@ static void __init gather_bootmem_prealloc(void)
 	}
 }
 
+unsigned long __initdata donated_pages[HUGE_MAX_HSTATE];
+
+/*
+ * NB: This should only be called before the hugepagesz= and hugepages=
+ * arguments are based (see parse_early_params() in init/main.c)
+ */
+void __init hugetlb_hstate_donate_gigantic(struct hstate *h,
+		unsigned long start, unsigned long pages)
+{
+	unsigned long size = huge_page_size(h);
+	unsigned long end = start + size * pages;
+	struct huge_bootmem_page *m;
+
+	BUILD_BUG_ON(IS_ENABLED(CONFIG_HIGHMEM));
+
+	pr_info("Adding %lu hugepages to %s (%#.16lx, %#.16lx)\n",
+		pages, h->name, start, end);
+
+	if (!IS_ALIGNED(start, size)) {
+		WARN(1, "Attempted to add mis-aligned hugepage range!\n");
+		return;
+	}
+
+	for (; start < end; start += size) {
+		m = phys_to_virt(start);
+		m->hstate = h;
+		list_add(&m->list, &huge_boot_pages);
+
+		h->max_huge_pages++;
+		donated_pages[hstate_index(h)]++;
+	}
+}
+
 static void __init hugetlb_hstate_alloc_pages(struct hstate *h)
 {
+	unsigned long donated;
 	unsigned long i;
 
-	for (i = 0; i < h->max_huge_pages; ++i) {
+	donated = donated_pages[hstate_index(h)];
+	if (donated >= h->max_huge_pages)
+		return;
+
+	for (i = donated; i < h->max_huge_pages; ++i) {
 		if (hstate_is_gigantic(h)) {
 			if (!alloc_bootmem_huge_page(h))
 				break;

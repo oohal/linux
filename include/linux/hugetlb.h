@@ -351,6 +351,8 @@ int __init alloc_bootmem_huge_page(struct hstate *h);
 
 void __init hugetlb_bad_size(void);
 void __init hugetlb_add_hstate(unsigned order);
+void __init hugetlb_hstate_donate_gigantic(struct hstate *h,
+	unsigned long start, unsigned long pages);
 struct hstate *size_to_hstate(unsigned long size);
 
 #ifndef HUGE_MAX_HSTATE
