@@ -2151,9 +2151,9 @@ static void __init prep_compound_huge_page(struct page *page,
 /* Put bootmem huge pages into the standard lists after mem_map is up */
 static void __init gather_bootmem_prealloc(void)
 {
-	struct huge_bootmem_page *m;
+	struct huge_bootmem_page *m, *prev;
 
-	list_for_each_entry(m, &huge_boot_pages, list) {
+	list_for_each_entry_safe(m, prev, &huge_boot_pages, list) {
 		struct hstate *h = m->hstate;
 		struct page *page;
 
