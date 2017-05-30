@@ -11,6 +11,9 @@
 static inline void arch_wb_cache_pmem(void *addr, size_t size)
 {
 }
+static inline void arch_invalidate_pmem(void *addr, size_t size)
+{
+}
 #endif
 
 /* this definition is in it's own header for tools/testing/nvdimm to consume */
