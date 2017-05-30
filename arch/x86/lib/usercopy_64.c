@@ -85,7 +85,7 @@ copy_user_handle_tail(char *to, char *from, unsigned len)
  * instruction. Note that @size is internally rounded up to be cache
  * line size aligned.
  */
-static void clean_cache_range(void *addr, size_t size)
+void clean_cache_range(void *addr, size_t size)
 {
 	u16 x86_clflush_size = boot_cpu_data.x86_clflush_size;
 	unsigned long clflush_mask = x86_clflush_size - 1;
@@ -96,6 +96,7 @@ static void clean_cache_range(void *addr, size_t size)
 	     p < vend; p += x86_clflush_size)
 		clwb(p);
 }
+EXPORT_SYMBOL(clean_cache_range);
 
 long __copy_user_flushcache(void *dst, const void __user *src, unsigned size)
 {

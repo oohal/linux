@@ -174,6 +174,7 @@ extern long __copy_user_nocache(void *dst, const void __user *src,
 extern long __copy_user_flushcache(void *dst, const void __user *src, unsigned size);
 extern void memcpy_page_flushcache(char *to, struct page *page, size_t offset,
 			   size_t len);
+void clean_cache_range(void *addr, size_t size);
 
 static inline int
 __copy_from_user_inatomic_nocache(void *dst, const void __user *src,
