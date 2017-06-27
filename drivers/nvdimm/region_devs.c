@@ -182,6 +182,12 @@ struct nd_region *to_nd_region(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(to_nd_region);
 
+struct device *to_nd_region_dev(struct nd_region *region)
+{
+	return &region->dev;
+}
+EXPORT_SYMBOL_GPL(to_nd_region_dev);
+
 struct nd_blk_region *to_nd_blk_region(struct device *dev)
 {
 	struct nd_region *nd_region = to_nd_region(dev);
