@@ -304,6 +304,9 @@ void power7_idle_type(unsigned long type)
 {
 	unsigned long srr1;
 
+	if (type != PNV_THREAD_WINKLE && !powersave_nap)
+		return;
+
 	srr1 = __power7_idle_type(type);
 	irq_set_pending_from_srr1(srr1);
 }
