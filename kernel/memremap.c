@@ -352,6 +352,8 @@ void *devm_memremap_pages(struct device *dev, struct dev_pagemap *pgmap)
 	align_start = res->start & ~(SECTION_SIZE - 1);
 	align_size = ALIGN(res->start + resource_size(res), SECTION_SIZE)
 		- align_start;
+	pr_err("%s: after align: checking for intersect %lx - %lx",
+			__func__, (unsigned long) align_start, (unsigned long) align_size);
 	is_ram = region_intersects(align_start, align_size,
 		IORESOURCE_SYSTEM_RAM, IORES_DESC_NONE);
 

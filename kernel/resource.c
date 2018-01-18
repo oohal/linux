@@ -536,12 +536,18 @@ int region_intersects(resource_size_t start, size_t size, unsigned long flags,
 				((desc == IORES_DESC_NONE) ||
 				 (desc == p->desc)));
 
-		if (start >= p->start && start <= p->end)
+		if (start >= p->start && start <= p->end) {
+			pr_err("%lx-%lx intersect %pR\n", start, start + size, p);
 			is_type ? type++ : other++;
-		if (end >= p->start && end <= p->end)
+		}
+		if (end >= p->start && end <= p->end) {
+			pr_err("%lx-%lx intersect %pR\n", start, start + size, p);
 			is_type ? type++ : other++;
-		if (p->start >= start && p->end <= end)
+		}
+		if (p->start >= start && p->end <= end) {
+			pr_err("%lx-%lx intersect %pR\n", start, start + size, p);
 			is_type ? type++ : other++;
+		}
 	}
 	read_unlock(&resource_lock);
 
