@@ -1,3 +1,6 @@
+config PMEM_PLATFORM_DEVICE
+	bool
+
 menuconfig LIBNVDIMM
 	tristate "NVDIMM (Non-Volatile Memory Device) Support"
 	depends on PHYS_ADDR_T_64BIT
@@ -109,6 +112,28 @@ config OF_PMEM
 	help
 	  Allows regions of persistent memory to be described in the
 	  device-tree.
+
+	  Select Y if unsure.
+
+config PMEM_PLATFORM_DRIVER
+	tristate "PMEM Platform device support"
+	default LIBNVDIMM
+	depends on LIBNVDIMM
+	select PMEM_PLATFORM_DEVICE
+	help
+	  Adds support for e820 legacy pmem devices and other pmem
+
+	  Select Y if unsure.
+
+config BOOTPMEM
+	bool "bootpmem= parameter support"
+	default PMEM_PLATFORM_DRIVER
+	depends on PMEM_PLATFORM_DEVICE && HAVE_MEMBLOCK
+	help
+	  Add support for the bootpmem= kernel command line parameter. This is similar
+	  to the memmap= parameter available on ACPI platforms, but it uses generic
+	  kernel facilities (the memblock allocator) to reserve memory rather than adding
+	  to the e820 table.
 
 	  Select Y if unsure.
 

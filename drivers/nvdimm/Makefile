@@ -27,3 +27,7 @@ libnvdimm-$(CONFIG_ND_CLAIM) += claim.o
 libnvdimm-$(CONFIG_BTT) += btt_devs.o
 libnvdimm-$(CONFIG_NVDIMM_PFN) += pfn_devs.o
 libnvdimm-$(CONFIG_NVDIMM_DAX) += dax_devs.o
+
+# NB: _DEVICE must be builtin, but the driver can be a module
+obj-$(CONFIG_PMEM_PLATFORM_DEVICE) += bootpmem.o
+obj-$(CONFIG_PMEM_PLATFORM_DRIVER) += nd_e820.o
