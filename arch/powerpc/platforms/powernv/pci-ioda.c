@@ -252,8 +252,7 @@ fail:
 static void pnv_ioda_reserve_dev_m64_pe(struct pci_dev *pdev,
 					 unsigned long *pe_bitmap)
 {
-	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct resource *r;
 	resource_size_t base, sgsz, start, end;
 	int segno, i;
@@ -351,8 +350,7 @@ static void pnv_ioda_reserve_m64_pe(struct pci_bus *bus,
 
 static struct pnv_ioda_pe *pnv_ioda_pick_m64_pe(struct pci_bus *bus, bool all)
 {
-	struct pci_controller *hose = pci_bus_to_host(bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
 	struct pnv_ioda_pe *master_pe, *pe;
 	unsigned long size, *pe_alloc;
 	int i;
@@ -673,8 +671,7 @@ struct pnv_ioda_pe *__pnv_ioda_get_pe(struct pnv_phb *phb, u16 bdfn)
 
 struct pnv_ioda_pe *pnv_ioda_get_pe(struct pci_dev *dev)
 {
-	struct pci_controller *hose = pci_bus_to_host(dev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
 	struct pci_dn *pdn = pci_get_pdn(dev);
 
 	if (!pdn)
@@ -1053,8 +1050,7 @@ static int pnv_pci_vf_resource_shift(struct pci_dev *dev, int offset)
 
 static struct pnv_ioda_pe *pnv_ioda_setup_dev_PE(struct pci_dev *dev)
 {
-	struct pci_controller *hose = pci_bus_to_host(dev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
 	struct pci_dn *pdn = pci_get_pdn(dev);
 	struct pnv_ioda_pe *pe;
 
@@ -1113,8 +1109,7 @@ static struct pnv_ioda_pe *pnv_ioda_setup_dev_PE(struct pci_dev *dev)
  */
 static struct pnv_ioda_pe *pnv_ioda_setup_bus_PE(struct pci_bus *bus, bool all)
 {
-	struct pci_controller *hose = pci_bus_to_host(bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
 	struct pnv_ioda_pe *pe = NULL;
 	unsigned int pe_num;
 
@@ -1181,8 +1176,7 @@ static struct pnv_ioda_pe *pnv_ioda_setup_npu_PE(struct pci_dev *npu_pdev)
 	struct pnv_ioda_pe *pe;
 	struct pci_dev *gpu_pdev;
 	struct pci_dn *npu_pdn;
-	struct pci_controller *hose = pci_bus_to_host(npu_pdev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(npu_pdev->bus);
 
 	/*
 	 * Due to a hardware errata PE#0 on the NPU is reserved for
@@ -1279,16 +1273,12 @@ static void pnv_pci_ioda_setup_PEs(void)
 #ifdef CONFIG_PCI_IOV
 static int pnv_pci_vf_release_m64(struct pci_dev *pdev, u16 num_vfs)
 {
-	struct pci_bus        *bus;
-	struct pci_controller *hose;
 	struct pnv_phb        *phb;
 	struct pci_dn         *pdn;
 	int                    i, j;
 	int                    m64_bars;
 
-	bus = pdev->bus;
-	hose = pci_bus_to_host(bus);
-	phb = hose->private_data;
+	phb = pci_bus_to_pnvhb(pdev->bus);
 	pdn = pci_get_pdn(pdev);
 
 	if (pdn->m64_single_mode)
@@ -1312,8 +1302,6 @@ static int pnv_pci_vf_release_m64(struct pci_dev *pdev, u16 num_vfs)
 
 static int pnv_pci_vf_assign_m64(struct pci_dev *pdev, u16 num_vfs)
 {
-	struct pci_bus        *bus;
-	struct pci_controller *hose;
 	struct pnv_phb        *phb;
 	struct pci_dn         *pdn;
 	unsigned int           win;
@@ -1325,9 +1313,7 @@ static int pnv_pci_vf_assign_m64(struct pci_dev *pdev, u16 num_vfs)
 	int                    pe_num;
 	int                    m64_bars;
 
-	bus = pdev->bus;
-	hose = pci_bus_to_host(bus);
-	phb = hose->private_data;
+	phb = pci_bus_to_pnvhb(pdev->bus);
 	pdn = pci_get_pdn(pdev);
 	total_vfs = pci_sriov_get_totalvfs(pdev);
 
@@ -1438,15 +1424,11 @@ static void pnv_pci_ioda2_release_dma_pe(struct pci_dev *dev, struct pnv_ioda_pe
 
 static void pnv_ioda_release_vf_PE(struct pci_dev *pdev)
 {
-	struct pci_bus        *bus;
-	struct pci_controller *hose;
 	struct pnv_phb        *phb;
 	struct pnv_ioda_pe    *pe, *pe_n;
 	struct pci_dn         *pdn;
 
-	bus = pdev->bus;
-	hose = pci_bus_to_host(bus);
-	phb = hose->private_data;
+	phb = pci_bus_to_pnvhb(pdev->bus);
 	pdn = pci_get_pdn(pdev);
 
 	if (!pdev->is_physfn)
@@ -1471,16 +1453,12 @@ static void pnv_ioda_release_vf_PE(struct pci_dev *pdev)
 
 void pnv_pci_sriov_disable(struct pci_dev *pdev)
 {
-	struct pci_bus        *bus;
-	struct pci_controller *hose;
 	struct pnv_phb        *phb;
 	struct pnv_ioda_pe    *pe;
 	struct pci_dn         *pdn;
 	u16                    num_vfs, i;
 
-	bus = pdev->bus;
-	hose = pci_bus_to_host(bus);
-	phb = hose->private_data;
+	phb = pci_bus_to_pnvhb(pdev->bus);
 	pdn = pci_get_pdn(pdev);
 	num_vfs = pdn->num_vfs;
 
@@ -1519,17 +1497,13 @@ static void pnv_ioda_setup_bus_iommu_group(struct pnv_ioda_pe *pe,
 #endif
 static void pnv_ioda_setup_vf_PE(struct pci_dev *pdev, u16 num_vfs)
 {
-	struct pci_bus        *bus;
-	struct pci_controller *hose;
 	struct pnv_phb        *phb;
 	struct pnv_ioda_pe    *pe;
 	int                    pe_num;
 	u16                    vf_index;
 	struct pci_dn         *pdn;
 
-	bus = pdev->bus;
-	hose = pci_bus_to_host(bus);
-	phb = hose->private_data;
+	phb = pci_bus_to_pnvhb(pdev->bus);
 	pdn = pci_get_pdn(pdev);
 
 	if (!pdev->is_physfn)
@@ -1556,7 +1530,7 @@ static void pnv_ioda_setup_vf_PE(struct pci_dev *pdev, u16 num_vfs)
 		pe->rid = (vf_bus << 8) | vf_devfn;
 
 		pe_info(pe, "VF %04d:%02d:%02d.%d associated with PE#%x\n",
-			hose->global_number, pdev->bus->number,
+			pci_domain_nr(pdev->bus), pdev->bus->number,
 			PCI_SLOT(vf_devfn), PCI_FUNC(vf_devfn), pe_num);
 
 		if (pnv_ioda_configure_pe(phb, pe)) {
@@ -1591,17 +1565,13 @@ static void pnv_ioda_setup_vf_PE(struct pci_dev *pdev, u16 num_vfs)
 
 int pnv_pci_sriov_enable(struct pci_dev *pdev, u16 num_vfs)
 {
-	struct pci_bus        *bus;
-	struct pci_controller *hose;
 	struct pnv_phb        *phb;
 	struct pnv_ioda_pe    *pe;
 	struct pci_dn         *pdn;
 	int                    ret;
 	u16                    i;
 
-	bus = pdev->bus;
-	hose = pci_bus_to_host(bus);
-	phb = hose->private_data;
+	phb = pci_bus_to_pnvhb(pdev->bus);
 	pdn = pci_get_pdn(pdev);
 
 	if (phb->type == PNV_PHB_IODA2) {
@@ -1816,8 +1786,7 @@ err:
 static bool pnv_pci_ioda_iommu_bypass_supported(struct pci_dev *pdev,
 		u64 dma_mask)
 {
-	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct pci_dn *pdn = pci_get_pdn(pdev);
 	struct pnv_ioda_pe *pe;
 
@@ -2866,8 +2835,7 @@ static void pnv_pci_init_ioda_msis(struct pnv_phb *phb)
 #ifdef CONFIG_PCI_IOV
 static void pnv_pci_ioda_fixup_iov_resources(struct pci_dev *pdev)
 {
-	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	const resource_size_t gate = phb->ioda.m64_segsize >> 2;
 	struct resource *res;
 	int i;
@@ -3202,10 +3170,9 @@ static void pnv_pci_ioda_fixup(void)
 static resource_size_t pnv_pci_window_alignment(struct pci_bus *bus,
 						unsigned long type)
 {
-	struct pci_dev *bridge;
-	struct pci_controller *hose = pci_bus_to_host(bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
 	int num_pci_bridges = 0;
+	struct pci_dev *bridge;
 
 	bridge = bus->self;
 	while (bridge) {
@@ -3291,8 +3258,7 @@ static void pnv_pci_fixup_bridge_resources(struct pci_bus *bus,
 
 static void pnv_pci_configure_bus(struct pci_bus *bus)
 {
-	struct pci_controller *hose = pci_bus_to_host(bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
 	struct pci_dev *bridge = bus->self;
 	struct pnv_ioda_pe *pe;
 	bool all = (bridge && pci_pcie_type(bridge) == PCI_EXP_TYPE_PCI_BRIDGE);
@@ -3354,8 +3320,7 @@ static resource_size_t pnv_pci_default_alignment(void)
 static resource_size_t pnv_pci_iov_resource_alignment(struct pci_dev *pdev,
 						      int resno)
 {
-	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct pci_dn *pdn = pci_get_pdn(pdev);
 	resource_size_t align;
 
@@ -3391,8 +3356,7 @@ static resource_size_t pnv_pci_iov_resource_alignment(struct pci_dev *pdev,
  */
 static bool pnv_pci_enable_device_hook(struct pci_dev *dev)
 {
-	struct pci_controller *hose = pci_bus_to_host(dev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
 	struct pci_dn *pdn;
 
 	/* The function is probably called while the PEs have
@@ -3577,8 +3541,7 @@ static void pnv_ioda_release_pe(struct pnv_ioda_pe *pe)
 
 static void pnv_pci_release_device(struct pci_dev *pdev)
 {
-	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct pci_dn *pdn = pci_get_pdn(pdev);
 	struct pnv_ioda_pe *pe;
 
@@ -3623,8 +3586,7 @@ static void pnv_pci_ioda_shutdown(struct pci_controller *hose)
 
 void pnv_pci_dma_dev_setup(struct pci_dev *pdev)
 {
-	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct pci_dn *pdn = pci_get_pdn(pdev);
 	struct pnv_ioda_pe *pe;
 
@@ -3664,8 +3626,7 @@ void pnv_pci_dma_dev_setup(struct pci_dev *pdev)
 
 void pnv_pci_dma_bus_setup(struct pci_bus *bus)
 {
-	struct pci_controller *hose = bus->sysdata;
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
 	struct pnv_ioda_pe *pe;
 
 	list_for_each_entry(pe, &phb->ioda.pe_list, list) {
@@ -3999,8 +3960,7 @@ void __init pnv_pci_init_npu2_opencapi_phb(struct device_node *np)
 
 static void pnv_npu2_opencapi_cfg_size_fixup(struct pci_dev *dev)
 {
-	struct pci_controller *hose = pci_bus_to_host(dev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
 
 	if (!machine_is(powernv))
 		return;

@@ -158,8 +158,7 @@ EXPORT_SYMBOL_GPL(pnv_pci_set_power_state);
 
 int pnv_setup_msi_irqs(struct pci_dev *pdev, int nvec, int type)
 {
-	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct msi_desc *entry;
 	struct msi_msg msg;
 	int hwirq;
@@ -207,8 +206,7 @@ int pnv_setup_msi_irqs(struct pci_dev *pdev, int nvec, int type)
 
 void pnv_teardown_msi_irqs(struct pci_dev *pdev)
 {
-	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
-	struct pnv_phb *phb = hose->private_data;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct msi_desc *entry;
 	irq_hw_number_t hwirq;
 
@@ -820,19 +818,15 @@ EXPORT_SYMBOL(pnv_pci_get_phb_node);
 
 int pnv_pci_set_tunnel_bar(struct pci_dev *dev, u64 addr, int enable)
 {
-	__be64 val;
-	struct pci_controller *hose;
-	struct pnv_phb *phb;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
 	u64 tunnel_bar;
+	__be64 val;
 	int rc;
 
 	if (!opal_check_token(OPAL_PCI_GET_PBCQ_TUNNEL_BAR))
 		return -ENXIO;
 	if (!opal_check_token(OPAL_PCI_SET_PBCQ_TUNNEL_BAR))
 		return -ENXIO;
-
-	hose = pci_bus_to_host(dev->bus);
-	phb = hose->private_data;
 
 	mutex_lock(&tunnel_mutex);
 	rc = opal_pci_get_pbcq_tunnel_bar(phb->opal_id, &val);
@@ -937,15 +931,13 @@ static int pnv_tce_iommu_bus_notifier(struct notifier_block *nb,
 	struct pci_dev *pdev;
 	struct pci_dn *pdn;
 	struct pnv_ioda_pe *pe;
-	struct pci_controller *hose;
 	struct pnv_phb *phb;
 
 	switch (action) {
 	case BUS_NOTIFY_ADD_DEVICE:
 		pdev = to_pci_dev(dev);
 		pdn = pci_get_pdn(pdev);
-		hose = pci_bus_to_host(pdev->bus);
-		phb = hose->private_data;
+		phb = pci_bus_to_pnvhb(pdev->bus);
 
 		WARN_ON_ONCE(!phb);
 		if (!pdn || pdn->pe_number == IODA_INVALID_PE || !phb)
