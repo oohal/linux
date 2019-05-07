@@ -1183,7 +1183,7 @@ void eeh_add_device_late(struct pci_dev *dev)
 	struct pci_dn *pdn;
 	struct eeh_dev *edev;
 
-	if (!dev || !eeh_enabled())
+	if (!dev)
 		return;
 
 	pr_debug("EEH: Adding device %s\n", pci_name(dev));
