@@ -278,27 +278,73 @@ int pnv_eeh_post_init(void)
 	return ret;
 }
 
-static int pnv_eeh_find_cap(struct pci_dn *pdn, int cap)
+static inline bool pnv_eeh_cfg_blocked(struct eeh_dev *edev)
+{
+	if (!edev || !edev->pe)
+		return false;
+
+	/*
+	 * We will issue FLR or AF FLR to all VFs, which are contained
+	 * in VF PE. It relies on the EEH PCI config accessors. So we
+	 * can't block them during the window.
+	 */
+	if (edev->physfn && (edev->pe->state & EEH_PE_RESET))
+		return false;
+
+	if (edev->pe->state & EEH_PE_CFG_BLOCKED)
+		return true;
+
+	return false;
+}
+
+static int pnv_eeh_read_config(struct eeh_dev *edev,
+			       int where, int size, u32 *val)
+{
+	struct pci_dn *pdn = eeh_dev_to_pdn(edev);
+
+	if (!pdn)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
+	if (pnv_eeh_cfg_blocked(edev)) {
+		*val = 0xFFFFFFFF;
+		return PCIBIOS_SET_FAILED;
+	}
+
+	return pnv_pci_cfg_read(pdn, where, size, val);
+}
+
+static int pnv_eeh_write_config(struct eeh_dev *edev,
+				int where, int size, u32 val)
+{
+	struct pci_dn *pdn = eeh_dev_to_pdn(edev);
+
+	if (!pdn)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
+	if (pnv_eeh_cfg_blocked(edev))
+		return PCIBIOS_SET_FAILED;
+
+	return pnv_pci_cfg_write(pdn, where, size, val);
+}
+
+static int pnv_eeh_find_cap(struct eeh_dev *edev, int cap)
 {
 	int pos = PCI_CAPABILITY_LIST;
 	int cnt = 48;   /* Maximal number of capabilities */
 	u32 status, id;
 
-	if (!pdn)
-		return 0;
-
 	/* Check if the device supports capabilities */
-	pnv_pci_cfg_read(pdn, PCI_STATUS, 2, &status);
+	pnv_eeh_read_config(edev, PCI_STATUS, 2, &status);
 	if (!(status & PCI_STATUS_CAP_LIST))
 		return 0;
 
 	while (cnt--) {
-		pnv_pci_cfg_read(pdn, pos, 1, &pos);
+		pnv_eeh_read_config(edev, pos, 1, &pos);
 		if (pos < 0x40)
 			break;
 
 		pos &= ~3;
-		pnv_pci_cfg_read(pdn, pos + PCI_CAP_LIST_ID, 1, &id);
+		pnv_eeh_read_config(edev, pos + PCI_CAP_LIST_ID, 1, &id);
 		if (id == 0xff)
 			break;
 
@@ -313,15 +359,14 @@ static int pnv_eeh_find_cap(struct pci_dn *pdn, int cap)
 	return 0;
 }
 
-static int pnv_eeh_find_ecap(struct pci_dn *pdn, int cap)
+static int pnv_eeh_find_ecap(struct eeh_dev *edev, int cap)
 {
-	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
 	u32 header;
 	int pos = 256, ttl = (4096 - 256) / 8;
 
 	if (!edev || !edev->pcie_cap)
 		return 0;
-	if (pnv_pci_cfg_read(pdn, pos, 4, &header) != PCIBIOS_SUCCESSFUL)
+	if (pnv_eeh_read_config(edev, pos, 4, &header) != PCIBIOS_SUCCESSFUL)
 		return 0;
 	else if (!header)
 		return 0;
@@ -334,7 +379,7 @@ static int pnv_eeh_find_ecap(struct pci_dn *pdn, int cap)
 		if (pos < 256)
 			break;
 
-		if (pnv_pci_cfg_read(pdn, pos, 4, &header) != PCIBIOS_SUCCESSFUL)
+		if (pnv_eeh_read_config(edev, pos, 4, &header) != PCIBIOS_SUCCESSFUL)
 			break;
 	}
 
@@ -382,15 +427,14 @@ static struct eeh_dev *pnv_eeh_probe_pdev(struct pci_dev *pdev)
 
 	/* Initialize eeh device */
 	edev->class_code = pdn->class_code;
-	edev->mode	&= 0xFFFFFF00;
-	edev->pcix_cap = pnv_eeh_find_cap(pdn, PCI_CAP_ID_PCIX);
-	edev->pcie_cap = pnv_eeh_find_cap(pdn, PCI_CAP_ID_EXP);
-	edev->af_cap   = pnv_eeh_find_cap(pdn, PCI_CAP_ID_AF);
-	edev->aer_cap  = pnv_eeh_find_ecap(pdn, PCI_EXT_CAP_ID_ERR);
+	edev->pcix_cap = pnv_eeh_find_cap(edev, PCI_CAP_ID_PCIX);
+	edev->pcie_cap = pnv_eeh_find_cap(edev, PCI_CAP_ID_EXP);
+	edev->af_cap   = pnv_eeh_find_cap(edev, PCI_CAP_ID_AF);
+	edev->aer_cap  = pnv_eeh_find_ecap(edev, PCI_EXT_CAP_ID_ERR);
 	if ((edev->class_code >> 8) == PCI_CLASS_BRIDGE_PCI) {
 		edev->mode |= EEH_DEV_BRIDGE;
 		if (edev->pcie_cap) {
-			pnv_pci_cfg_read(pdn, edev->pcie_cap + PCI_EXP_FLAGS,
+			pnv_eeh_read_config(edev, edev->pcie_cap + PCI_EXP_FLAGS,
 					 2, &pcie_flags);
 			pcie_flags = (pcie_flags & PCI_EXP_FLAGS_TYPE) >> 4;
 			if (pcie_flags == PCI_EXP_TYPE_ROOT_PORT)
@@ -839,8 +883,7 @@ out:
 
 static int __pnv_eeh_bridge_reset(struct pci_dev *dev, int option)
 {
-	struct pci_dn *pdn = pci_get_pdn_by_devfn(dev->bus, dev->devfn);
-	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
+	struct eeh_dev *edev = pci_dev_to_eeh_dev(dev);
 	int aer = edev ? edev->aer_cap : 0;
 	u32 ctrl;
 
@@ -944,10 +987,9 @@ void pnv_pci_reset_secondary_bus(struct pci_dev *dev)
 	}
 }
 
-static void pnv_eeh_wait_for_pending(struct pci_dn *pdn, const char *type,
+static void pnv_eeh_wait_for_pending(struct eeh_dev *edev, const char *type,
 				     int pos, u16 mask)
 {
-	struct eeh_dev *edev = pdn->edev;
 	int i, status = 0;
 
 	/* Wait for Transaction Pending bit to be cleared */
@@ -965,9 +1007,8 @@ static void pnv_eeh_wait_for_pending(struct pci_dn *pdn, const char *type,
 		PCI_SLOT(pdn->devfn), PCI_FUNC(pdn->devfn));
 }
 
-static int pnv_eeh_do_flr(struct pci_dn *pdn, int option)
+static int pnv_eeh_do_flr(struct eeh_dev *edev, int option)
 {
-	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
 	u32 reg = 0;
 
 	if (WARN_ON(!edev->pcie_cap))
@@ -980,7 +1021,7 @@ static int pnv_eeh_do_flr(struct pci_dn *pdn, int option)
 	switch (option) {
 	case EEH_RESET_HOT:
 	case EEH_RESET_FUNDAMENTAL:
-		pnv_eeh_wait_for_pending(pdn, "",
+		pnv_eeh_wait_for_pending(edev, "",
 					 edev->pcie_cap + PCI_EXP_DEVSTA,
 					 PCI_EXP_DEVSTA_TRPND);
 		eeh_ops->read_config(edev, edev->pcie_cap + PCI_EXP_DEVCTL,
@@ -1003,9 +1044,8 @@ static int pnv_eeh_do_flr(struct pci_dn *pdn, int option)
 	return 0;
 }
 
-static int pnv_eeh_do_af_flr(struct pci_dn *pdn, int option)
+static int pnv_eeh_do_af_flr(struct eeh_dev *edev, int option)
 {
-	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
 	u32 cap = 0;
 
 	if (WARN_ON(!edev->af_cap))
@@ -1023,7 +1063,7 @@ static int pnv_eeh_do_af_flr(struct pci_dn *pdn, int option)
 		 * test is used, so we use the conrol offset rather than status
 		 * and shift the test bit to match.
 		 */
-		pnv_eeh_wait_for_pending(pdn, "AF",
+		pnv_eeh_wait_for_pending(edev, "AF",
 					 edev->af_cap + PCI_AF_CTRL,
 					 PCI_AF_STATUS_TP << 8);
 		eeh_ops->write_config(edev, edev->af_cap + PCI_AF_CTRL,
@@ -1042,20 +1082,18 @@ static int pnv_eeh_do_af_flr(struct pci_dn *pdn, int option)
 static int pnv_eeh_reset_vf_pe(struct eeh_pe *pe, int option)
 {
 	struct eeh_dev *edev;
-	struct pci_dn *pdn;
 	int ret;
 
 	/* The VF PE should have only one child device */
 	edev = list_first_entry_or_null(&pe->edevs, struct eeh_dev, entry);
-	pdn = eeh_dev_to_pdn(edev);
-	if (!pdn)
+	if (!edev)
 		return -ENXIO;
 
-	ret = pnv_eeh_do_flr(pdn, option);
+	ret = pnv_eeh_do_flr(edev, option);
 	if (!ret)
 		return ret;
 
-	return pnv_eeh_do_af_flr(pdn, option);
+	return pnv_eeh_do_af_flr(edev, option);
 }
 
 /**
@@ -1242,57 +1280,6 @@ static int pnv_eeh_err_inject(struct eeh_pe *pe, int type, int func,
 	}
 
 	return 0;
-}
-
-static inline bool pnv_eeh_cfg_blocked(struct pci_dn *pdn)
-{
-	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
-
-	if (!edev || !edev->pe)
-		return false;
-
-	/*
-	 * We will issue FLR or AF FLR to all VFs, which are contained
-	 * in VF PE. It relies on the EEH PCI config accessors. So we
-	 * can't block them during the window.
-	 */
-	if (edev->physfn && (edev->pe->state & EEH_PE_RESET))
-		return false;
-
-	if (edev->pe->state & EEH_PE_CFG_BLOCKED)
-		return true;
-
-	return false;
-}
-
-static int pnv_eeh_read_config(struct eeh_dev *edev,
-			       int where, int size, u32 *val)
-{
-	struct pci_dn *pdn = eeh_dev_to_pdn(edev);
-
-	if (!pdn)
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	if (pnv_eeh_cfg_blocked(pdn)) {
-		*val = 0xFFFFFFFF;
-		return PCIBIOS_SET_FAILED;
-	}
-
-	return pnv_pci_cfg_read(pdn, where, size, val);
-}
-
-static int pnv_eeh_write_config(struct eeh_dev *edev,
-				int where, int size, u32 val)
-{
-	struct pci_dn *pdn = eeh_dev_to_pdn(edev);
-
-	if (!pdn)
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	if (pnv_eeh_cfg_blocked(pdn))
-		return PCIBIOS_SET_FAILED;
-
-	return pnv_pci_cfg_write(pdn, where, size, val);
 }
 
 static void pnv_eeh_dump_hub_diag_common(struct OpalIoP7IOCErrorData *data)
