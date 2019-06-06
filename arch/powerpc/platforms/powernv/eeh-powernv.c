@@ -1649,20 +1649,13 @@ static int pnv_eeh_restore_config(struct pci_dn *pdn)
 	if (!edev)
 		return -EEXIST;
 
-	/*
-	 * We have to restore the PCI config space after reset since the
-	 * firmware can't see SRIOV VFs.
-	 *
-	 * FIXME: The MPS, error routing rules, timeout setting are worthy
-	 * to be exported by firmware in extendible way.
-	 */
-	if (edev->physfn) {
-		ret = eeh_restore_vf_config(pdn);
-	} else {
-		phb = pdn->phb->private_data;
-		ret = opal_pci_reinit(phb->opal_id,
-				      OPAL_REINIT_PCI_DEV, config_addr);
-	}
+	/* Nothing to do for VFs */
+	if (edev->physfn)
+		return 0;
+
+	phb = pdn->phb->private_data;
+	ret = opal_pci_reinit(phb->opal_id,
+			      OPAL_REINIT_PCI_DEV, config_addr);
 
 	if (ret) {
 		pr_warn("%s: Can't reinit PCI dev 0x%x (%lld)\n",
@@ -1690,24 +1683,6 @@ static struct eeh_ops pnv_eeh_ops = {
 	.restore_config		= pnv_eeh_restore_config,
 	.notify_resume		= NULL
 };
-
-#ifdef CONFIG_PCI_IOV
-static void pnv_pci_fixup_vf_mps(struct pci_dev *pdev)
-{
-	struct pci_dn *pdn = pci_get_pdn(pdev);
-	int parent_mps;
-
-	if (!pdev->is_virtfn)
-		return;
-
-	/* Synchronize MPS for VF and PF */
-	parent_mps = pcie_get_mps(pdev->physfn);
-	if ((128 << pdev->pcie_mpss) >= parent_mps)
-		pcie_set_mps(pdev, parent_mps);
-	pdn->mps = pcie_get_mps(pdev);
-}
-DECLARE_PCI_FIXUP_HEADER(PCI_ANY_ID, PCI_ANY_ID, pnv_pci_fixup_vf_mps);
-#endif /* CONFIG_PCI_IOV */
 
 /**
  * eeh_powernv_init - Register platform dependent EEH operations
