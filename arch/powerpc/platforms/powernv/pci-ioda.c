@@ -1709,10 +1709,9 @@ int pnv_pcibios_sriov_enable(struct pci_dev *pdev, u16 num_vfs)
 
 static void pnv_pci_ioda_dma_dev_setup(struct pnv_phb *phb, struct pci_dev *pdev)
 {
-	struct pci_dn *pdn = pci_get_pdn(pdev);
 	struct pnv_ioda_pe *pe;
 
-	pe = &phb->ioda.pe_array[pdn->pe_number];
+	pe = pnv_ioda_get_pe(pdev);
 	WARN_ON(get_dma_ops(&pdev->dev) != &dma_iommu_ops);
 	pdev->dev.archdata.dma_offset = pe->tce_bypass_base;
 	set_iommu_table_base(&pdev->dev, pe->table_group.tables[0]);
