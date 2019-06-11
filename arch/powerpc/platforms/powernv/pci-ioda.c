@@ -853,11 +853,13 @@ static int pnv_ioda_deconfigure_pe(struct pnv_phb *phb, struct pnv_ioda_pe *pe)
 
 	/* Release from all parents PELT-V */
 	while (parent) {
-		struct pci_dn *pdn = pci_get_pdn(parent);
-		if (pdn && pdn->pe_number != IODA_INVALID_PE) {
-			rc = opal_pci_set_peltv(phb->opal_id, pdn->pe_number,
-						pe->pe_number, OPAL_REMOVE_PE_FROM_DOMAIN);
-			/* XXX What to do in case of error ? */
+		struct pnv_ioda_pe *parent_pe = pnv_ioda_get_pe(parent);
+
+		if (parent_pe) {
+			rc = opal_pci_set_peltv(phb->opal_id,
+						parent_pe->pe_number,
+						pe->pe_number,
+						OPAL_REMOVE_PE_FROM_DOMAIN);
 		}
 		parent = parent->bus->self;
 	}
