@@ -760,6 +760,11 @@ static int pnv_ioda_set_peltv(struct pnv_phb *phb,
 		}
 	}
 
+	/*
+	 * Walk the bridges up to the root. Along the way mark this PE as
+	 * downstream of the bridge PE(s) so that errors upstream errors
+	 * also cause this PE to be frozen.
+	 */
 	if (pe->flags & (PNV_IODA_PE_BUS_ALL | PNV_IODA_PE_BUS))
 		pdev = pe->pbus->self;
 	else if (pe->flags & PNV_IODA_PE_DEV)
@@ -768,16 +773,27 @@ static int pnv_ioda_set_peltv(struct pnv_phb *phb,
 	else if (pe->flags & PNV_IODA_PE_VF)
 		pdev = pe->parent_dev;
 #endif /* CONFIG_PCI_IOV */
-	while (pdev) {
-		struct pci_dn *pdn = pci_get_pdn(pdev);
-		struct pnv_ioda_pe *parent;
 
-		if (pdn && pdn->pe_number != IODA_INVALID_PE) {
-			parent = &phb->ioda.pe_array[pdn->pe_number];
-			ret = pnv_ioda_set_one_peltv(phb, parent, pe, is_add);
-			if (ret)
-				return ret;
-		}
+	while (pdev) {
+		struct pnv_ioda_pe *parent = pnv_ioda_get_pe(pdev);
+
+		/*
+		 * FIXME: This is called from pcibios_setup_bridge(), which is called
+		 * from the bottom (leaf) bridge to the root. This means that this
+		 * doesn't actually setup the PELT-V entries since the PEs for
+		 * the bridges above assigned after this is run for the leaf.
+		 *
+		 * FIXMEFIXME: might not be true since moving PE configuration
+		 * into pcibios_bus_add_device().
+		 */
+		if (!parent)
+			break;
+
+		WARN_ON(!parent || parent->pe_number == IODA_INVALID_PE);
+
+		ret = pnv_ioda_set_one_peltv(phb, parent, pe, is_add);
+		if (ret)
+			return ret;
 
 		pdev = pdev->bus->self;
 	}
