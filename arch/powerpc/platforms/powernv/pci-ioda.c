@@ -768,6 +768,11 @@ static int pnv_ioda_set_peltv(struct pnv_phb *phb,
 		}
 	}
 
+	/*
+	 * Walk the bridges up to the root. Along the way mark this PE as
+	 * downstream of the bridge PE(s) so that errors upstream errors
+	 * also cause this PE to be frozen.
+	 */
 	if (pe->flags & (PNV_IODA_PE_BUS_ALL | PNV_IODA_PE_BUS))
 		pdev = pe->pbus->self;
 	else if (pe->flags & PNV_IODA_PE_DEV)
@@ -776,16 +781,27 @@ static int pnv_ioda_set_peltv(struct pnv_phb *phb,
 	else if (pe->flags & PNV_IODA_PE_VF)
 		pdev = pe->parent_dev;
 #endif /* CONFIG_PCI_IOV */
-	while (pdev) {
-		struct pci_dn *pdn = pci_get_pdn(pdev);
-		struct pnv_ioda_pe *parent;
 
-		if (pdn && pdn->pe_number != IODA_INVALID_PE) {
-			parent = &phb->ioda.pe_array[pdn->pe_number];
-			ret = pnv_ioda_set_one_peltv(phb, parent, pe, is_add);
-			if (ret)
-				return ret;
-		}
+	while (pdev) {
+		struct pnv_ioda_pe *parent = pnv_ioda_get_pe(pdev);
+
+		/*
+		 * FIXME: This is called from pcibios_setup_bridge(), which is called
+		 * from the bottom (leaf) bridge to the root. This means that this
+		 * doesn't actually setup the PELT-V entries since the PEs for
+		 * the bridges above assigned after this is run for the leaf.
+		 *
+		 * FIXMEFIXME: might not be true since moving PE configuration
+		 * into pcibios_bus_add_device().
+		 */
+		if (!parent)
+			break;
+
+		WARN_ON(!parent || parent->pe_number == IODA_INVALID_PE);
+
+		ret = pnv_ioda_set_one_peltv(phb, parent, pe, is_add);
+		if (ret)
+			return ret;
 
 		pdev = pdev->bus->self;
 	}
@@ -800,10 +816,11 @@ static void pnv_ioda_unset_peltv(struct pnv_phb *phb,
 	int64_t rc;
 
 	while (parent) {
-		struct pci_dn *pdn = pci_get_pdn(parent);
+		struct pnv_ioda_pe *parent_pe = pnv_ioda_get_pe(parent);
 
-		if (pdn && pdn->pe_number != IODA_INVALID_PE) {
-			rc = opal_pci_set_peltv(phb->opal_id, pdn->pe_number,
+		if (parent_pe) {
+			rc = opal_pci_set_peltv(phb->opal_id,
+						parent_pe->pe_number,
 						pe->pe_number,
 						OPAL_REMOVE_PE_FROM_DOMAIN);
 			/* XXX What to do in case of error ? */
@@ -1349,13 +1366,11 @@ static bool pnv_pci_ioda_iommu_bypass_supported(struct pci_dev *pdev,
 		u64 dma_mask)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
-	struct pci_dn *pdn = pci_get_pdn(pdev);
-	struct pnv_ioda_pe *pe;
+	struct pnv_ioda_pe *pe = pnv_ioda_get_pe(pdev);
 
-	if (WARN_ON(!pdn || pdn->pe_number == IODA_INVALID_PE))
+	if (WARN_ON(!pe))
 		return false;
 
-	pe = &phb->ioda.pe_array[pdn->pe_number];
 	if (pe->tce_bypass_enabled) {
 		u64 top = pe->tce_bypass_base + memblock_end_of_DRAM() - 1;
 		if (dma_mask >= top)
@@ -2610,7 +2625,6 @@ static resource_size_t pnv_pci_default_alignment(void)
 static bool pnv_pci_enable_device_hook(struct pci_dev *dev)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
-	struct pci_dn *pdn;
 
 	/* The function is probably called while the PEs have
 	 * not be created yet. For example, resource reassignment
@@ -2620,11 +2634,7 @@ static bool pnv_pci_enable_device_hook(struct pci_dev *dev)
 	if (!phb->initialized)
 		return true;
 
-	pdn = pci_get_pdn(dev);
-	if (!pdn || pdn->pe_number == IODA_INVALID_PE)
-		return false;
-
-	return true;
+	return !!pnv_ioda_get_pe(dev);
 }
 
 static bool pnv_ocapi_enable_device_hook(struct pci_dev *dev)
@@ -2810,14 +2820,14 @@ static void pnv_ioda_release_pe(struct pnv_ioda_pe *pe)
 static void pnv_pci_release_device(struct pci_dev *pdev)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
+	struct pnv_ioda_pe *pe = pnv_ioda_get_pe(pdev);
 	struct pci_dn *pdn = pci_get_pdn(pdev);
-	struct pnv_ioda_pe *pe;
 
 	/* The VF PE state is torn down when sriov_disable() is called */
 	if (pdev->is_virtfn)
 		return;
 
-	if (!pdn || pdn->pe_number == IODA_INVALID_PE)
+	if (WARN_ON(!pe))
 		return;
 
 #ifdef CONFIG_PCI_IOV
@@ -2838,7 +2848,6 @@ static void pnv_pci_release_device(struct pci_dev *pdev)
 	 * be increased on adding devices. It leads to unbalanced PE's device
 	 * count and eventually make normal PCI hotplug path broken.
 	 */
-	pe = &phb->ioda.pe_array[pdn->pe_number];
 	pdn->pe_number = IODA_INVALID_PE;
 
 	WARN_ON(--pe->device_count < 0);
