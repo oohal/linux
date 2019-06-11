@@ -1801,13 +1801,11 @@ static bool pnv_pci_ioda_iommu_bypass_supported(struct pci_dev *pdev,
 		u64 dma_mask)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
-	struct pci_dn *pdn = pci_get_pdn(pdev);
-	struct pnv_ioda_pe *pe;
+	struct pnv_ioda_pe *pe = pnv_ioda_get_pe(pdev);
 
-	if (WARN_ON(!pdn || pdn->pe_number == IODA_INVALID_PE))
+	if (WARN_ON(!pe))
 		return false;
 
-	pe = &phb->ioda.pe_array[pdn->pe_number];
 	if (pe->tce_bypass_enabled) {
 		u64 top = pe->tce_bypass_base + memblock_end_of_DRAM() - 1;
 		if (dma_mask >= top)
