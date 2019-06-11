@@ -1760,10 +1760,10 @@ void pnv_pci_ioda_dma_dev_setup(struct pci_dev *pdev)
 	 * hasn't been assigned. Do nothing for the
 	 * case.
 	 */
-	if (pdn->pe_number == IODA_INVALID_PE)
+	pe = pnv_ioda_get_pe(pdev);
+	if (!pe)
 		return;
 
-	pe = &phb->ioda.pe_array[pdn->pe_number];
 	WARN_ON(get_dma_ops(&pdev->dev) != &dma_iommu_ops);
 	pdev->dev.archdata.dma_offset = pe->tce_bypass_base;
 	set_iommu_table_base(&pdev->dev, pe->table_group.tables[0]);
