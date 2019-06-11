@@ -98,25 +98,16 @@ EXPORT_SYMBOL(pnv_pci_get_npu_dev);
 static struct pnv_ioda_pe *get_gpu_pci_dev_and_pe(struct pnv_ioda_pe *npe,
 						  struct pci_dev **gpdev)
 {
-	struct pnv_phb *phb;
-	struct pci_controller *hose;
 	struct pci_dev *pdev;
 	struct pnv_ioda_pe *pe;
-	struct pci_dn *pdn;
 
 	pdev = pnv_pci_get_gpu_dev(npe->pdev);
 	if (!pdev)
 		return NULL;
 
-	pdn = pci_get_pdn(pdev);
-	if (WARN_ON(!pdn || pdn->pe_number == IODA_INVALID_PE))
-		return NULL;
+	pe = pnv_ioda_get_pe(pdev);
 
-	hose = pci_bus_to_host(pdev->bus);
-	phb = hose->private_data;
-	pe = &phb->ioda.pe_array[pdn->pe_number];
-
-	if (gpdev)
+	if (pe && pdev)
 		*gpdev = pdev;
 
 	return pe;
