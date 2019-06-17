@@ -646,6 +646,19 @@ static void pnv_pci_config_check_eeh(struct pnv_phb *phb, u16 bdfn)
 	if (fstate == OPAL_EEH_STOPPED_MMIO_FREEZE ||
 	    fstate == OPAL_EEH_STOPPED_DMA_FREEZE  ||
 	    fstate == OPAL_EEH_STOPPED_MMIO_DMA_FREEZE) {
+
+		/*
+		 * Scanning an empty slot will result in a freeze on the reserved PE.
+		 *
+		 * Some old and bad PHBs block config space access to frozen PEs in
+		 * addition to MMIOs, so unfreeze it here.
+		 */
+		if (pe_no == phb->ioda.reserved_pe_idx) {
+			phb->unfreeze_pe(phb, phb->ioda.reserved_pe_idx,
+					 OPAL_EEH_ACTION_CLEAR_FREEZE_ALL);
+			return;
+		}
+
 		/*
 		 * If PHB supports compound PE, freeze it for
 		 * consistency.
