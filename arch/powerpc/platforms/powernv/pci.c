@@ -754,17 +754,12 @@ static int pnv_pci_read_config(struct pci_bus *bus,
 			       unsigned int devfn,
 			       int where, int size, u32 *val)
 {
-	struct pci_dn *pdn;
 	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
 	u16 bdfn = bus->number << 8 | devfn;
 	struct eeh_dev *edev;
 	int ret;
 
 	*val = 0xFFFFFFFF;
-	pdn = pci_get_pdn_by_devfn(bus, devfn);
-	if (!pdn)
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
 	edev = pnv_eeh_find_edev(phb, bdfn);
 	if (!pnv_eeh_pre_cfg_check(edev))
 		return PCIBIOS_DEVICE_NOT_FOUND;
@@ -785,15 +780,10 @@ static int pnv_pci_write_config(struct pci_bus *bus,
 				unsigned int devfn,
 				int where, int size, u32 val)
 {
-	struct pci_dn *pdn;
 	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
 	u16 bdfn = bus->number << 8 | devfn;
 	struct eeh_dev *edev;
 	int ret;
-
-	pdn = pci_get_pdn_by_devfn(bus, devfn);
-	if (!pdn)
-		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	edev = pnv_eeh_find_edev(phb, bdfn);
 	if (!pnv_eeh_pre_cfg_check(edev))
