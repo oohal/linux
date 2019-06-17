@@ -654,11 +654,9 @@ static void pnv_pci_config_check_eeh(struct pnv_phb *phb, u16 bdfn)
 	}
 }
 
-int pnv_pci_cfg_read(struct pci_dn *pdn,
+int pnv_pci_cfg_read(struct pnv_phb *phb, u16 bdfn,
 		     int where, int size, u32 *val)
 {
-	struct pnv_phb *phb = pdn->phb->private_data;
-	u32 bdfn = (pdn->busno << 8) | pdn->devfn;
 	s64 rc;
 
 	switch (size) {
@@ -685,19 +683,16 @@ int pnv_pci_cfg_read(struct pci_dn *pdn,
 		return PCIBIOS_FUNC_NOT_SUPPORTED;
 	}
 
-	pr_devel("%s: bus: %x devfn: %x +%x/%x -> %08x\n",
-		 __func__, pdn->busno, pdn->devfn, where, size, *val);
+	pr_devel("%s: bdfn: %x  +%x/%x -> %08x\n",
+		 __func__, bdfn, where, size, *val);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int pnv_pci_cfg_write(struct pci_dn *pdn,
+int pnv_pci_cfg_write(struct pnv_phb *phb, u16 bdfn,
 		      int where, int size, u32 val)
 {
-	struct pnv_phb *phb = pdn->phb->private_data;
-	u32 bdfn = (pdn->busno << 8) | pdn->devfn;
-
-	pr_devel("%s: bus: %x devfn: %x +%x/%x -> %08x\n",
-		 __func__, pdn->busno, pdn->devfn, where, size, val);
+	pr_devel("%s: bdfn: %x +%x/%x -> %08x\n",
+		 __func__, bdfn, where, size, val);
 	switch (size) {
 	case 1:
 		opal_pci_config_write_byte(phb->opal_id, bdfn, where, val);
@@ -753,12 +748,11 @@ static int pnv_pci_read_config(struct pci_bus *bus,
 	if (!pdn)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	edev = pdn_to_eeh_dev(pdn);
+	edev = pnv_eeh_find_edev(phb, bdfn);
 	if (!pnv_eeh_pre_cfg_check(edev))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	ret = pnv_pci_cfg_read(pdn, where, size, val);
-	phb = pdn->phb->private_data;
+	ret = pnv_pci_cfg_read(phb, bdfn, where, size, val);
 	if (phb->flags & PNV_PHB_FLAG_EEH && edev) {
 		if (*val == EEH_IO_ERROR_VALUE(size) &&
 		    eeh_dev_check_failure(edev))
@@ -784,11 +778,11 @@ static int pnv_pci_write_config(struct pci_bus *bus,
 	if (!pdn)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	edev = pdn_to_eeh_dev(pdn);
+	edev = pnv_eeh_find_edev(phb, bdfn);
 	if (!pnv_eeh_pre_cfg_check(edev))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	ret = pnv_pci_cfg_write(pdn, where, size, val);
+	ret = pnv_pci_cfg_write(phb, bdfn, where, size, val);
 
 	if (!(phb->flags & PNV_PHB_FLAG_EEH))
 		pnv_pci_config_check_eeh(phb, bdfn);
