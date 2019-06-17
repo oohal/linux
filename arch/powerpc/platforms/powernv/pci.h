@@ -7,8 +7,6 @@
 #include <asm/iommu.h>
 #include <asm/msi_bitmap.h>
 
-struct pci_dn;
-
 enum pnv_phb_type {
 	PNV_PHB_IODA1		= 0,
 	PNV_PHB_IODA2		= 1,
@@ -282,9 +280,9 @@ extern struct pci_ops pnv_pci_ops;
 
 void pnv_pci_dump_phb_diag_data(struct pci_controller *hose,
 				unsigned char *log_buff);
-int pnv_pci_cfg_read(struct pci_dn *pdn,
+int pnv_pci_cfg_read(struct pnv_phb *phb, u16 bdfn,
 		     int where, int size, u32 *val);
-int pnv_pci_cfg_write(struct pci_dn *pdn,
+int pnv_pci_cfg_write(struct pnv_phb *phb, u16 bdfn,
 		      int where, int size, u32 val);
 extern struct iommu_table *pnv_pci_table_alloc(int nid);
 

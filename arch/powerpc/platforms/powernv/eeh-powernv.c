@@ -328,31 +328,25 @@ static inline bool pnv_eeh_cfg_blocked(struct eeh_dev *edev)
 static int pnv_eeh_read_config(struct eeh_dev *edev,
 			       int where, int size, u32 *val)
 {
-	struct pci_dn *pdn = eeh_dev_to_pdn(edev);
-
-	if (!pdn)
-		return PCIBIOS_DEVICE_NOT_FOUND;
+	struct pnv_phb *phb = edev->controller->private_data;
 
 	if (pnv_eeh_cfg_blocked(edev)) {
 		*val = 0xFFFFFFFF;
 		return PCIBIOS_SET_FAILED;
 	}
 
-	return pnv_pci_cfg_read(pdn, where, size, val);
+	return pnv_pci_cfg_read(phb, edev->bdfn, where, size, val);
 }
 
 static int pnv_eeh_write_config(struct eeh_dev *edev,
 				int where, int size, u32 val)
 {
-	struct pci_dn *pdn = eeh_dev_to_pdn(edev);
-
-	if (!pdn)
-		return PCIBIOS_DEVICE_NOT_FOUND;
+	struct pnv_phb *phb = edev->controller->private_data;
 
 	if (pnv_eeh_cfg_blocked(edev))
 		return PCIBIOS_SET_FAILED;
 
-	return pnv_pci_cfg_write(pdn, where, size, val);
+	return pnv_pci_cfg_write(phb, edev->bdfn, where, size, val);
 }
 
 static struct eeh_pe *pnv_eeh_get_upstream_pe(struct pci_dev *pdev)
