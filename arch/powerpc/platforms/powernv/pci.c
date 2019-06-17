@@ -595,9 +595,15 @@ static void pnv_pci_handle_eeh_config(struct pnv_phb *phb, u32 pe_no)
 	spin_unlock_irqrestore(&phb->lock, flags);
 }
 
-static void pnv_pci_config_check_eeh(struct pci_dn *pdn)
+/*
+ * This, very strangely named, function checks if a config access
+ * caused an EEH and un-freezes the PE if it did. This is mainly
+ * for the !CONFIG_EEH case where nothing is going to un-freeze
+ * it for us.
+ */
+static void pnv_pci_config_check_eeh(struct pnv_phb *phb, u16 bdfn)
 {
-	struct pnv_phb *phb = pdn->phb->private_data;
+	struct pnv_ioda_pe *ioda_pe;
 	u8	fstate = 0;
 	__be16	pcierr = 0;
 	unsigned int pe_no;
@@ -608,10 +614,11 @@ static void pnv_pci_config_check_eeh(struct pci_dn *pdn)
 	 * setup that yet. So all ER errors should be mapped to
 	 * reserved PE.
 	 */
-	pe_no = pdn->pe_number;
-	if (pe_no == IODA_INVALID_PE) {
+	ioda_pe = pnv_pci_bdfn_to_pe(phb, bdfn);
+	if (ioda_pe)
+		pe_no = ioda_pe->pe_number;
+	else
 		pe_no = phb->ioda.reserved_pe_idx;
-	}
 
 	/*
 	 * Fetch frozen state. If the PHB support compound PE,
@@ -633,7 +640,7 @@ static void pnv_pci_config_check_eeh(struct pci_dn *pdn)
 	}
 
 	pr_devel(" -> EEH check, bdfn=%04x PE#%x fstate=%x\n",
-		 (pdn->busno << 8) | (pdn->devfn), pe_no, fstate);
+		 bdfn, pe_no, fstate);
 
 	/* Clear the frozen state if applicable */
 	if (fstate == OPAL_EEH_STOPPED_MMIO_FREEZE ||
@@ -646,6 +653,7 @@ static void pnv_pci_config_check_eeh(struct pci_dn *pdn)
 		if (phb->freeze_pe)
 			phb->freeze_pe(phb, pe_no);
 
+		/* fish out the EEH log and send an EEH event. */
 		pnv_pci_handle_eeh_config(phb, pe_no);
 	}
 }
@@ -739,7 +747,8 @@ static int pnv_pci_read_config(struct pci_bus *bus,
 			       int where, int size, u32 *val)
 {
 	struct pci_dn *pdn;
-	struct pnv_phb *phb;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
+	u16 bdfn = bus->number << 8 | devfn;
 	struct eeh_dev *edev;
 	int ret;
 
@@ -759,7 +768,7 @@ static int pnv_pci_read_config(struct pci_bus *bus,
 		    eeh_dev_check_failure(edev))
                         return PCIBIOS_DEVICE_NOT_FOUND;
 	} else {
-		pnv_pci_config_check_eeh(pdn);
+		pnv_pci_config_check_eeh(phb, bdfn);
 	}
 
 	return ret;
@@ -770,7 +779,8 @@ static int pnv_pci_write_config(struct pci_bus *bus,
 				int where, int size, u32 val)
 {
 	struct pci_dn *pdn;
-	struct pnv_phb *phb;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
+	u16 bdfn = bus->number << 8 | devfn;
 	struct eeh_dev *edev;
 	int ret;
 
@@ -783,9 +793,9 @@ static int pnv_pci_write_config(struct pci_bus *bus,
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	ret = pnv_pci_cfg_write(pdn, where, size, val);
-	phb = pdn->phb->private_data;
+
 	if (!(phb->flags & PNV_PHB_FLAG_EEH))
-		pnv_pci_config_check_eeh(pdn);
+		pnv_pci_config_check_eeh(phb, bdfn);
 
 	return ret;
 }
