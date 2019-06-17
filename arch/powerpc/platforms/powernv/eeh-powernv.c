@@ -275,6 +275,37 @@ int pnv_eeh_post_init(void)
 	return ret;
 }
 
+struct eeh_dev *pnv_eeh_find_edev(struct pnv_phb *phb, u16 bdfn)
+{
+	struct pnv_ioda_pe *ioda_pe;
+	struct eeh_dev *tmp, *edev;
+	struct eeh_pe *pe;
+
+	/* EEH not enabled ? */
+	if (!(phb->flags & PNV_PHB_FLAG_EEH))
+		return NULL;
+
+	/* Fish the EEH PE from the IODA PE */
+	ioda_pe = pnv_pci_bdfn_to_pe(phb, bdfn);
+	if (!ioda_pe)
+		return NULL;
+
+	/*
+	 * FIXME: Doing a tree-traversal followed by a list traversal
+	 * on every config access is dumb. Not much dumber than the pci_dn
+	 * tree traversal we did before, but still quite dumb.
+	 */
+	pe = eeh_pe_get(phb->hose, ioda_pe->pe_number, 0);
+	if (!pe)
+		return NULL;
+
+	eeh_pe_for_each_dev(pe, edev, tmp)
+		if (edev->bdfn == bdfn)
+			return edev;
+
+	return NULL;
+}
+
 static inline bool pnv_eeh_cfg_blocked(struct eeh_dev *edev)
 {
 	if (!edev || !edev->pe)

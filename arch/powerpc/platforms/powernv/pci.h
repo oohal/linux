@@ -304,6 +304,8 @@ extern void pnv_set_msi_irq_chip(struct pnv_phb *phb, unsigned int virq);
 extern unsigned long pnv_pci_ioda2_get_table_size(__u32 page_shift,
 		__u64 window_size, __u32 levels);
 extern int pnv_eeh_post_init(void);
+struct eeh_dev;
+struct eeh_dev *pnv_eeh_find_edev(struct pnv_phb *phb, u16 bdfn);
 
 __printf(3, 4)
 extern void pe_level_printk(const struct pnv_ioda_pe *pe, const char *level,
