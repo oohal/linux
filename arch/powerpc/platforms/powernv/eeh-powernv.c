@@ -348,9 +348,9 @@ static int pnv_eeh_find_ecap(struct pci_dn *pdn, int cap)
  * pnv_eeh_probe - Do probe on PCI device
  * @pdev: pci_dev to probe
  *
- * Creates (or finds an existing) edev for this pci_dev.
+ * Create, or find the existing, eeh_dev for this pci_dev.
  */
-static void pnv_eeh_probe_pdev(struct pci_dev *pdev)
+static struct eeh_dev *pnv_eeh_probe_pdev(struct pci_dev *pdev)
 {
 	struct pci_dn *pdn = pci_get_pdn(pdev);
 	struct pci_controller *hose = pdn->phb;
@@ -367,11 +367,19 @@ static void pnv_eeh_probe_pdev(struct pci_dev *pdev)
 	 * the probing.
 	 */
 	if (!edev || edev->pe)
-		return;
+		return NULL;
+
+	/* already configured? */
+	if (edev->pdev) {
+		pr_debug("%s: found existing edev for %04x:%02x:%02x.%01x\n",
+			__func__, hose->global_number, config_addr >> 8,
+			PCI_SLOT(config_addr), PCI_FUNC(config_addr));
+		return edev;
+	}
 
 	/* Skip for PCI-ISA bridge */
 	if ((pdn->class_code >> 8) == PCI_CLASS_BRIDGE_ISA)
-		return;
+		return NULL;
 
 	eeh_edev_dbg(edev, "Probing device\n");
 
@@ -401,7 +409,7 @@ static void pnv_eeh_probe_pdev(struct pci_dev *pdev)
 	ret = eeh_add_to_parent_pe(edev);
 	if (ret) {
 		eeh_edev_warn(edev, "Failed to add device to PE (code %d)\n", ret);
-		return;
+		return NULL;
 	}
 
 	/*
@@ -459,6 +467,8 @@ static void pnv_eeh_probe_pdev(struct pci_dev *pdev)
 	eeh_save_bars(edev);
 
 	eeh_edev_dbg(edev, "EEH enabled on device\n");
+
+	return edev;
 }
 
 /**
