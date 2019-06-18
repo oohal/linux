@@ -317,6 +317,23 @@ static void pseries_eeh_probe_pdn(struct pci_dn *pdn)
 	eeh_save_bars(edev);
 }
 
+/* Platform specific method to retrieve the eeh_dev for this pci_dev */
+static struct eeh_dev *pseries_eeh_probe_pdev(struct pci_dev *pdev)
+{
+	struct eeh_dev *edev;
+	struct pci_dn *pdn;
+
+	pdn = pci_get_pdn_by_devfn(pdev->bus, pdev->devfn);
+	if (!pdn)
+		return NULL;
+
+	edev = pdn_to_eeh_dev(pdn);
+	if (!edev || !edev->pe)
+		return NULL;
+
+	return edev;
+}
+
 /**
  * pseries_eeh_set_option - Initialize EEH or MMIO/DMA reenable
  * @pe: EEH PE
@@ -754,7 +771,7 @@ static struct eeh_ops pseries_eeh_ops = {
 	.name			= "pseries",
 	.init			= pseries_eeh_init,
 	.probe_pdn		= pseries_eeh_probe_pdn,
-	.probe_pdev 		= NULL,
+	.probe_pdev 		= pseries_eeh_probe_pdev,
 	.set_option		= pseries_eeh_set_option,
 	.get_pe_addr		= pseries_eeh_get_pe_addr,
 	.get_state		= pseries_eeh_get_state,

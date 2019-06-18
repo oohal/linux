@@ -215,8 +215,20 @@ enum {
 struct eeh_ops {
 	char *name;
 	int (*init)(void);
-	void (*probe_pdn)(struct pci_dn *pdn);    /* used on pseries */
-	void (*probe_pdev)(struct pci_dev *pdev); /* used on powernv */
+
+	/*
+	 * on pseries the eeh_dev is initialised before the pci_dev exists
+	 * using the contents of the pci_dn.
+	 */
+	void (*probe_pdn)(struct pci_dn *pdn);
+
+	/*
+	 * probe_pdev() is used to find, and possibly create, an eeh_dev
+	 * for a pci_dev. The EEH core binds the returned device to the
+	 * pci_dev.
+	 */
+	struct eeh_dev *(*probe_pdev)(struct pci_dev *pdev);
+
 	int (*set_option)(struct eeh_pe *pe, int option);
 	int (*get_pe_addr)(struct eeh_pe *pe);
 	int (*get_state)(struct eeh_pe *pe, int *delay);

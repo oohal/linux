@@ -1099,17 +1099,24 @@ EXPORT_SYMBOL_GPL(eeh_add_device_tree_early);
  */
 void eeh_add_device_late(struct pci_dev *dev)
 {
-	struct pci_dn *pdn;
 	struct eeh_dev *edev;
 
 	if (!dev)
 		return;
 
-	pdn = pci_get_pdn_by_devfn(dev->bus, dev->devfn);
-	edev = pdn_to_eeh_dev(pdn);
-	eeh_edev_dbg(edev, "Adding device\n");
-	if (edev->pdev == dev) {
-		eeh_edev_dbg(edev, "Device already referenced!\n");
+	pr_debug("EEH: Adding device %s\n", pci_name(dev));
+
+	/* pci_dev_to_eeh_dev() can only work if archdata.edev is already set */
+	edev = pci_dev_to_eeh_dev(dev);
+	if (edev) {
+		/* FIXME: I don't remember why this isn't an error, but it's not */
+		eeh_edev_dbg(edev, "Already bound to an eeh_dev!\n");
+		return;
+	}
+
+	edev = eeh_ops->probe_pdev(dev);
+	if (!edev) {
+		pr_debug("EEH: Adding device failed\n");
 		return;
 	}
 
@@ -1118,8 +1125,13 @@ void eeh_add_device_late(struct pci_dev *dev)
 	 * unbalanced kref to the device during unplug time, which
 	 * relies on pcibios_release_device(). So we have to remove
 	 * that here explicitly.
+	 *
+	 * FIXME: This really shouldn't be necessary. We should probably
+	 * tear down the EEH state when we detatch the pci_dev from the
+	 * bus. We might need to move the bus notifiers out of the platforms
+	 * first.
 	 */
-	if (edev->pdev) {
+	if (edev->pdev && edev->pdev != dev) {
 		eeh_rmv_from_parent_pe(edev);
 		eeh_addr_cache_rmv_dev(edev->pdev);
 		eeh_sysfs_remove_device(edev->pdev);
@@ -1130,17 +1142,11 @@ void eeh_add_device_late(struct pci_dev *dev)
 		 * into error handler afterwards.
 		 */
 		edev->mode |= EEH_DEV_NO_HANDLER;
-
-		edev->pdev = NULL;
-		dev->dev.archdata.edev = NULL;
 	}
 
-	if (eeh_ops->probe_pdev && eeh_has_flag(EEH_PROBE_MODE_DEV))
-		eeh_ops->probe_pdev(dev);
-
+	/* bind the pdev and the edev together */
 	edev->pdev = dev;
 	dev->dev.archdata.edev = edev;
-
 	eeh_addr_cache_insert_dev(dev);
 	eeh_sysfs_add_device(dev);
 }
