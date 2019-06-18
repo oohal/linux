@@ -346,23 +346,13 @@ static int pnv_eeh_find_ecap(struct pci_dn *pdn, int cap)
 
 /**
  * pnv_eeh_probe - Do probe on PCI device
- * @pdn: PCI device node
- * @data: unused
+ * @pdev: pci_dev to probe
  *
- * When EEH module is installed during system boot, all PCI devices
- * are checked one by one to see if it supports EEH. The function
- * is introduced for the purpose. By default, EEH has been enabled
- * on all PCI devices. That's to say, we only need do necessary
- * initialization on the corresponding eeh device and create PE
- * accordingly.
- *
- * It's notable that's unsafe to retrieve the EEH device through
- * the corresponding PCI device. During the PCI device hotplug, which
- * was possiblly triggered by EEH core, the binding between EEH device
- * and the PCI device isn't built yet.
+ * Creates (or finds an existing) edev for this pci_dev.
  */
-static void *pnv_eeh_probe(struct pci_dn *pdn, void *data)
+static void pnv_eeh_probe_pdev(struct pci_dev *pdev)
 {
+	struct pci_dn *pdn = pci_get_pdn(pdev);
 	struct pci_controller *hose = pdn->phb;
 	struct pnv_phb *phb = hose->private_data;
 	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
@@ -377,11 +367,11 @@ static void *pnv_eeh_probe(struct pci_dn *pdn, void *data)
 	 * the probing.
 	 */
 	if (!edev || edev->pe)
-		return NULL;
+		return;
 
 	/* Skip for PCI-ISA bridge */
 	if ((pdn->class_code >> 8) == PCI_CLASS_BRIDGE_ISA)
-		return NULL;
+		return;
 
 	eeh_edev_dbg(edev, "Probing device\n");
 
@@ -411,7 +401,7 @@ static void *pnv_eeh_probe(struct pci_dn *pdn, void *data)
 	ret = eeh_add_to_parent_pe(edev);
 	if (ret) {
 		eeh_edev_warn(edev, "Failed to add device to PE (code %d)\n", ret);
-		return NULL;
+		return;
 	}
 
 	/*
@@ -469,8 +459,6 @@ static void *pnv_eeh_probe(struct pci_dn *pdn, void *data)
 	eeh_save_bars(edev);
 
 	eeh_edev_dbg(edev, "EEH enabled on device\n");
-
-	return NULL;
 }
 
 /**
@@ -1673,7 +1661,8 @@ static int pnv_eeh_restore_config(struct eeh_dev *edev)
 static struct eeh_ops pnv_eeh_ops = {
 	.name                   = "powernv",
 	.init                   = pnv_eeh_init,
-	.probe			= pnv_eeh_probe,
+	.probe_pdn		= NULL,
+	.probe_pdev		= pnv_eeh_probe_pdev,
 	.set_option             = pnv_eeh_set_option,
 	.get_pe_addr            = pnv_eeh_get_pe_addr,
 	.get_state              = pnv_eeh_get_state,

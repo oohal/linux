@@ -229,7 +229,7 @@ static int pseries_eeh_find_ecap(struct pci_dn *pdn, int cap)
  * are checked one by one to see if it supports EEH. The function
  * is introduced for the purpose.
  */
-static void *pseries_eeh_probe(struct pci_dn *pdn, void *data)
+static void pseries_eeh_probe_pdn(struct pci_dn *pdn)
 {
 	struct eeh_dev *edev;
 	struct eeh_pe pe;
@@ -240,15 +240,15 @@ static void *pseries_eeh_probe(struct pci_dn *pdn, void *data)
 	/* Retrieve OF node and eeh device */
 	edev = pdn_to_eeh_dev(pdn);
 	if (!edev || edev->pe)
-		return NULL;
+		return;
 
 	/* Check class/vendor/device IDs */
 	if (!pdn->vendor_id || !pdn->device_id || !pdn->class_code)
-		return NULL;
+		return;
 
 	/* Skip for PCI-ISA bridge */
         if ((pdn->class_code >> 8) == PCI_CLASS_BRIDGE_ISA)
-		return NULL;
+		return;
 
 	eeh_edev_dbg(edev, "Probing device\n");
 
@@ -315,8 +315,6 @@ static void *pseries_eeh_probe(struct pci_dn *pdn, void *data)
 
 	/* Save memory bars */
 	eeh_save_bars(edev);
-
-	return NULL;
 }
 
 /**
@@ -755,7 +753,8 @@ static int pseries_notify_resume(struct pci_dn *pdn)
 static struct eeh_ops pseries_eeh_ops = {
 	.name			= "pseries",
 	.init			= pseries_eeh_init,
-	.probe			= pseries_eeh_probe,
+	.probe_pdn		= pseries_eeh_probe_pdn,
+	.probe_pdev 		= NULL,
 	.set_option		= pseries_eeh_set_option,
 	.get_pe_addr		= pseries_eeh_get_pe_addr,
 	.get_state		= pseries_eeh_get_state,
