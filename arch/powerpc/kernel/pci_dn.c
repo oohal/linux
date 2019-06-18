@@ -290,6 +290,9 @@ struct pci_dn *pci_add_device_node_info(struct pci_controller *hose,
 	struct eeh_dev *edev;
 #endif
 
+	pr_err("skipping adding pdn for %pOF\n", dn);
+	return NULL;
+
 	pdn = kzalloc(sizeof(*pdn), GFP_KERNEL);
 	if (pdn == NULL)
 		return NULL;
