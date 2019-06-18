@@ -215,7 +215,8 @@ enum {
 struct eeh_ops {
 	char *name;
 	int (*init)(void);
-	void* (*probe)(struct pci_dn *pdn, void *data);
+	void (*probe_pdn)(struct pci_dn *pdn);    /* used on pseries */
+	void (*probe_pdev)(struct pci_dev *pdev); /* used on powernv */
 	int (*set_option)(struct eeh_pe *pe, int option);
 	int (*get_pe_addr)(struct eeh_pe *pe);
 	int (*get_state)(struct eeh_pe *pe, int *delay);

@@ -1066,7 +1066,7 @@ void eeh_add_device_early(struct pci_dn *pdn)
 	    (eeh_has_flag(EEH_PROBE_MODE_DEVTREE) && 0 == phb->buid))
 		return;
 
-	eeh_ops->probe(pdn, NULL);
+	eeh_ops->probe_pdn(pdn);
 }
 
 /**
@@ -1135,8 +1135,8 @@ void eeh_add_device_late(struct pci_dev *dev)
 		dev->dev.archdata.edev = NULL;
 	}
 
-	if (eeh_has_flag(EEH_PROBE_MODE_DEV))
-		eeh_ops->probe(pdn, NULL);
+	if (eeh_ops->probe_pdev && eeh_has_flag(EEH_PROBE_MODE_DEV))
+		eeh_ops->probe_pdev(dev);
 
 	edev->pdev = dev;
 	dev->dev.archdata.edev = edev;
