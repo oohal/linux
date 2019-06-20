@@ -391,21 +391,7 @@ int eeh_add_to_parent_pe(struct eeh_dev *edev)
 	 * components.
 	 */
 	pe = eeh_pe_get(pdn->phb, edev->pe_config_addr, config_addr);
-	if (pe && !(pe->type & EEH_PE_INVALID)) {
-		/* Mark the PE as type of PCI bus */
-		pe->type = EEH_PE_BUS;
-		edev->pe = pe;
-
-		/* Put the edev to PE */
-		list_add_tail(&edev->entry, &pe->edevs);
-		pr_debug("EEH: Add %04x:%02x:%02x.%01x to Bus PE#%x\n",
-			 pdn->phb->global_number,
-			 pdn->busno,
-			 PCI_SLOT(pdn->devfn),
-			 PCI_FUNC(pdn->devfn),
-			 pe->addr);
-		return 0;
-	} else if (pe && (pe->type & EEH_PE_INVALID)) {
+	if (pe) {
 		list_add_tail(&edev->entry, &pe->edevs);
 		edev->pe = pe;
 		/*
@@ -420,8 +406,7 @@ int eeh_add_to_parent_pe(struct eeh_dev *edev)
 			parent = parent->parent;
 		}
 
-		pr_debug("EEH: Add %04x:%02x:%02x.%01x to Device "
-			 "PE#%x, Parent PE#%x\n",
+		pr_debug("EEH: Add %04x:%02x:%02x.%01x to PE#%x, Parent PE#%x\n",
 			 pdn->phb->global_number,
 			 pdn->busno,
 			 PCI_SLOT(pdn->devfn),
