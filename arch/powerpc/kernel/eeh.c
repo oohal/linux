@@ -1185,10 +1185,13 @@ void eeh_remove_device(struct pci_dev *dev)
 	 */
 	edev->in_error = false;
 	dev->dev.archdata.edev = NULL;
-	if (!(edev->pe->state & EEH_PE_KEEP))
+	if (!(edev->pe->state & EEH_PE_KEEP)) {
+		pci_err(dev, "removing PE\n");
 		eeh_pe_tree_remove(edev);
-	else
+	} else {
+		pci_err(dev, "marked edev disconnected\n");
 		edev->mode |= EEH_DEV_DISCONNECTED;
+	}
 }
 
 int eeh_unfreeze_pe(struct eeh_pe *pe)
