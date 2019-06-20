@@ -394,17 +394,6 @@ int eeh_add_to_parent_pe(struct eeh_dev *edev)
 	if (pe) {
 		list_add_tail(&edev->entry, &pe->edevs);
 		edev->pe = pe;
-		/*
-		 * We're running to here because of PCI hotplug caused by
-		 * EEH recovery. We need clear EEH_PE_INVALID until the top.
-		 */
-		parent = pe;
-		while (parent) {
-			if (!(parent->type & EEH_PE_INVALID))
-				break;
-			parent->type &= ~EEH_PE_INVALID;
-			parent = parent->parent;
-		}
 
 		pr_debug("EEH: Add %04x:%02x:%02x.%01x to PE#%x, Parent PE#%x\n",
 			 pdn->phb->global_number,
@@ -475,9 +464,8 @@ int eeh_add_to_parent_pe(struct eeh_dev *edev)
  */
 int eeh_rmv_from_parent_pe(struct eeh_dev *edev)
 {
-	struct eeh_pe *pe, *parent, *child;
-	int cnt;
 	struct pci_dn *pdn = eeh_dev_to_pdn(edev);
+	struct eeh_pe *pe, *parent;
 
 	pe = eeh_dev_to_pe(edev);
 	if (!pe) {
@@ -511,21 +499,6 @@ int eeh_rmv_from_parent_pe(struct eeh_dev *edev)
 				kfree(pe);
 			} else {
 				break;
-			}
-		} else {
-			if (list_empty(&pe->edevs)) {
-				cnt = 0;
-				list_for_each_entry(child, &pe->child_list, child) {
-					if (!(child->type & EEH_PE_INVALID)) {
-						cnt++;
-						break;
-					}
-				}
-
-				if (!cnt)
-					pe->type |= EEH_PE_INVALID;
-				else
-					break;
 			}
 		}
 

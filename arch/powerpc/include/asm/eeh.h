@@ -55,7 +55,6 @@ struct pci_dn;
  * in the corresponding PHB. Therefore, the root PEs should be created
  * against existing PHBs in on-to-one fashion.
  */
-#define EEH_PE_INVALID	(1 << 0)	/* Invalid   */
 #define EEH_PE_PHB	(1 << 1)	/* PHB PE    */
 #define EEH_PE_DEVICE 	(1 << 2)	/* Device PE */
 #define EEH_PE_VF	(1 << 4)	/* VF PE     */
