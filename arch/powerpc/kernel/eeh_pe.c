@@ -489,17 +489,35 @@ int eeh_rmv_from_parent_pe(struct eeh_dev *edev)
 	 */
 	while (1) {
 		parent = pe->parent;
+
+		/* PHB PEs should never be removed */
 		if (pe->type & EEH_PE_PHB)
 			break;
 
-		if (!(pe->state & EEH_PE_KEEP)) {
-			if (list_empty(&pe->edevs) &&
-			    list_empty(&pe->child_list)) {
-				list_del(&pe->child);
-				kfree(pe);
-			} else {
-				break;
-			}
+		if (!list_empty(&pe->child_list))
+			break;
+
+		if (!list_empty(&pe->edevs))
+			break;
+
+		/*
+		 * Across an eeh_device_reset() we might remove all the eeh_dev's
+		 * from the PE, but we want to keep the PE itself around so we have
+		 * accurate PE freeze stats.
+		 */
+		if (pe->state & EEH_PE_KEEP)
+			break;
+
+		/*
+		 * If we're under-going a recovery pass then we don't want
+		 * to change the eeh_pe topology. When the recovery thread is
+		 * done it'll prune the empty PE for us.
+		 */
+		if (pe->state & EEH_PE_RECOVERING) {
+			pe->state |= EEH_PE_CLEANUP;
+		} else {
+			list_del(&pe->child);
+			kfree(pe);
 		}
 
 		pe = parent;

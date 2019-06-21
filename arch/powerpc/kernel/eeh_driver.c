@@ -744,6 +744,33 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
  */
 #define MAX_WAIT_FOR_RECOVERY 300
 
+
+/* Walks the PE tree after processing an event to remove any stale PEs.
+ *
+ * NB: This needs to be recursive to ensure the leaf PEs get removed
+ * before their parents do. It should be possible to do this
+ * non-recursively, but:
+ *
+ * a) That sort of code tends to be horrible to read
+ * b) This is pretty obviously correcty.
+ * c) The PE tree is about the same height as the PCI bus tree
+ *    and we have no issues processing that recursively.
+ */
+static void eeh_pe_cleanup(struct eeh_pe *pe)
+{
+	struct eeh_pe *child_pe;
+
+	list_for_each_entry(child_pe, &pe->child_list, child)
+		eeh_pe_cleanup(child_pe);
+
+	if (pe->state & EEH_PE_CLEANUP) {
+		list_del(&pe->child);
+		kfree(pe);
+	} else {
+		pe->state &= ~EEH_PE_RECOVERING;
+	}
+}
+
 /**
  * eeh_handle_normal_event - Handle EEH events on a specific PE
  * @pe: EEH PE - which should not be used after we return, as it may
@@ -781,8 +808,6 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 			__func__, pe->phb->global_number, pe->addr);
 		return;
 	}
-
-	eeh_pe_state_mark(pe, EEH_PE_RECOVERING);
 
 	eeh_pe_update_time_stamp(pe);
 	pe->freeze_count++;
@@ -973,7 +998,12 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 			return;
 		}
 	}
-	eeh_pe_state_clear(pe, EEH_PE_RECOVERING, true);
+
+	/*
+	 * Clean up any PEs without devices. While marked as EEH_PE_RECOVERYING
+	 * we don't want to modify the PE tree structure so we do it here.
+	 */
+	eeh_pe_cleanup(pe);
 }
 
 /**
@@ -1045,6 +1075,7 @@ void eeh_handle_special_event(void)
 		 */
 		if (rc == EEH_NEXT_ERR_FROZEN_PE ||
 		    rc == EEH_NEXT_ERR_FENCED_PHB) {
+			eeh_pe_state_mark(pe, EEH_PE_RECOVERING);
 			eeh_handle_normal_event(pe);
 		} else {
 			pci_lock_rescan_remove();
