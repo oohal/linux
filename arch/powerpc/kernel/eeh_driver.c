@@ -876,6 +876,36 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 	if (!devices)
 		goto out; /* nothing to recover */
 
+	/* Log the event */
+	if (pe->type & EEH_PE_PHB) {
+		pr_err("EEH: PHB#%x failure detected, location: %s\n",
+			pe->phb->global_number, eeh_pe_loc_get(pe));
+	} else {
+		struct eeh_pe *phb_pe = eeh_phb_pe_get(pe->phb);
+
+		pr_err("EEH: Frozen PHB#%x-PE#%x detected\n",
+		       pe->phb->global_number, pe->addr);
+		pr_err("EEH: PE location: %s, PHB location: %s\n",
+		       eeh_pe_loc_get(pe), eeh_pe_loc_get(phb_pe));
+	}
+
+	/* Save a stack trace to the PE so we can print it in the event handler */
+	if (pe->trace_entries) {
+		void **ptrs = (void **) pe->stack_trace;
+		int i;
+
+		pr_err("EEH: Frozen PHB#%x-PE#%x detected\n",
+		       pe->phb->global_number, pe->addr);
+
+		/* FIXME: Use the same format as dump_stack() */
+		pr_err("EEH: Call Trace:\n");
+		for (i = 0; i < pe->trace_entries; i++)
+			pr_err("EEH: [%pK] %pS\n", ptrs[i], ptrs[i]);
+
+		pe->trace_entries = 0;
+	}
+
+
 	eeh_pe_update_time_stamp(pe);
 	pe->freeze_count++;
 	if (pe->freeze_count > eeh_max_freezes) {

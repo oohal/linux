@@ -126,8 +126,16 @@ int __eeh_send_failure_event(struct eeh_pe *pe)
 	 * This prevents the PE from being free()ed by a hotplug driver
 	 * while the PE is sitting in the event queue.
 	 */
-	if (pe)
+	if (pe) {
+		/*
+		 * Save the current stack trace so we can dump it from the
+		 * event handler thread.
+		 */
+		pe->trace_entries = stack_trace_save(pe->stack_trace,
+					 ARRAY_SIZE(pe->stack_trace), 0);
+
 		eeh_pe_state_mark(pe, EEH_PE_RECOVERING);
+	}
 
 	/* We may or may not be called in an interrupt context */
 	spin_lock_irqsave(&eeh_eventlist_lock, flags);
