@@ -55,11 +55,24 @@ EXPORT_SYMBOL_GPL(pci_find_bus_by_node);
 void pcibios_release_device(struct pci_dev *dev)
 {
 	struct pci_controller *phb = pci_bus_to_host(dev->bus);
+#ifdef CONFIG_EEH
+	struct eeh_dev *edev = pci_dev_to_eeh_dev(dev);
+	struct pci_dn *pdn = eeh_dev_to_pdn(edev);
+#endif
 
 	eeh_remove_device(dev);
 
 	if (phb->controller_ops.release_device)
 		phb->controller_ops.release_device(dev);
+
+#ifdef CONFIG_EEH
+	if (pdn && (pdn->flags & PCI_DN_FLAG_DEAD)) {
+		pci_err(dev, "%s: releasing dead PCI_DN pdn: %px, edev: %px\n",
+				__func__, pdn, edev);
+		kfree(pdn);
+		/* FIXME: Also free the eeh_dev */
+	}
+#endif
 }
 
 /**

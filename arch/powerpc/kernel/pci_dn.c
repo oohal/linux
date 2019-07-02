@@ -336,12 +336,25 @@ void pci_remove_device_node_info(struct device_node *dn)
 	WARN_ON(!list_empty(&pdn->child_list));
 	list_del(&pdn->list);
 
+	/* Drop the parent pci_dn's ref to our backing dt node */
 	parent = of_get_parent(dn);
 	if (parent)
 		of_node_put(parent);
 
-	dn->data = NULL;
-	kfree(pdn);
+	/*
+	 * If the eeh_dev has a live pci_dev we can't free the pdn. Instead
+	 * we mark the pci_dn as dead so it can free()ed in the pci_dev's
+	 * release function.
+	 */
+	if (edev->pdev) {
+		pr_err("marked pdn for %pOF as dead\n", dn);
+		pdn->flags |= PCI_DN_FLAG_DEAD;
+	} else {
+		pr_err("free()ed pdn for %pOF\n", dn);
+		dn->data = NULL;
+		kfree(pdn);
+	}
+
 }
 EXPORT_SYMBOL_GPL(pci_remove_device_node_info);
 
