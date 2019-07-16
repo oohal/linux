@@ -136,6 +136,27 @@ static void opal_fadump_get_config(struct fw_dump *fadump_conf,
 		last_end = base + size;
 	}
 
+	/*
+	 * Rarely, but it can so happen that system crashes before all
+	 * boot memory regions are registered for MPIPL. In such
+	 * cases, warn that the vmcore may not be accurate and proceed
+	 * anyway as that is the best bet considering free pages, cache
+	 * pages, user pages, etc are usually filtered out.
+	 *
+	 * Hope the memory that could not be preserved only has pages
+	 * that are usually filtered out while saving the vmcore.
+	 */
+	if (fdm->region_cnt < fdm->registered_regions) {
+		pr_warn("The crashdump may not be accurate as the below boot memory regions could not be preserved:\n");
+		i = fdm->registered_regions;
+		while (i < fdm->region_cnt) {
+			pr_warn("\t%d. base: 0x%llx, size: 0x%llx\n",
+				(i + 1), fdm->rgn[i].src,
+				fdm->rgn[i].size);
+			i++;
+		}
+	}
+
 	fadump_conf->boot_mem_top = (fadump_conf->boot_memory_size + hole_size);
 	fadump_conf->boot_mem_regs_cnt = fdm->region_cnt;
 	opal_fadump_update_config(fadump_conf, fdm);
