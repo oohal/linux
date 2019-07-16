@@ -117,6 +117,8 @@ struct fw_dump {
 
 	unsigned long	boot_mem_dest_addr;
 
+	u64		kernel_metadata;
+
 	int		ibm_configure_kernel_dump;
 
 	unsigned long	fadump_enabled:1;
@@ -131,6 +133,8 @@ struct fw_dump {
 
 struct fadump_ops {
 	ulong	(*init_fadump_mem_struct)(struct fw_dump *fadump_config);
+	ulong	(*get_kernel_metadata_size)(void);
+	int	(*setup_kernel_metadata)(struct fw_dump *fadump_config);
 	int	(*register_fadump)(struct fw_dump *fadump_config);
 	int	(*unregister_fadump)(struct fw_dump *fadump_config);
 	int	(*invalidate_fadump)(struct fw_dump *fadump_config);

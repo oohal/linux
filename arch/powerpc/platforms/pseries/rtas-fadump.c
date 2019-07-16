@@ -123,6 +123,21 @@ static ulong rtas_fadump_init_mem_struct(struct fw_dump *fadump_conf)
 	return addr;
 }
 
+/*
+ * On this platform, the metadata struture is passed while registering
+ * for FADump and the same is returned by f/w in capture kernel.
+ * No additional provision to setup metadata separately.
+ */
+static ulong rtas_fadump_get_kernel_metadata_size(void)
+{
+	return 0;
+}
+
+static int rtas_fadump_setup_kernel_metadata(struct fw_dump *fadump_conf)
+{
+	return 0;
+}
+
 static int rtas_fadump_register_fadump(struct fw_dump *fadump_conf)
 {
 	int rc, err = -EIO;
@@ -488,15 +503,16 @@ static void rtas_fadump_trigger(struct fadump_crash_info_header *fdh,
 	rtas_os_term((char *)msg);
 }
 
-
 static struct fadump_ops rtas_fadump_ops = {
-	.init_fadump_mem_struct	= rtas_fadump_init_mem_struct,
-	.register_fadump	= rtas_fadump_register_fadump,
-	.unregister_fadump	= rtas_fadump_unregister_fadump,
-	.invalidate_fadump	= rtas_fadump_invalidate_fadump,
-	.process_fadump		= rtas_fadump_process_fadump,
-	.fadump_region_show	= rtas_fadump_region_show,
-	.fadump_trigger		= rtas_fadump_trigger,
+	.init_fadump_mem_struct		= rtas_fadump_init_mem_struct,
+	.get_kernel_metadata_size	= rtas_fadump_get_kernel_metadata_size,
+	.setup_kernel_metadata		= rtas_fadump_setup_kernel_metadata,
+	.register_fadump		= rtas_fadump_register_fadump,
+	.unregister_fadump		= rtas_fadump_unregister_fadump,
+	.invalidate_fadump		= rtas_fadump_invalidate_fadump,
+	.process_fadump			= rtas_fadump_process_fadump,
+	.fadump_region_show		= rtas_fadump_region_show,
+	.fadump_trigger			= rtas_fadump_trigger,
 };
 
 int __init rtas_fadump_dt_scan(struct fw_dump *fadump_conf, ulong node)
