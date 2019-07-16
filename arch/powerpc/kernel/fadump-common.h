@@ -54,6 +54,7 @@
 enum fadump_platform_type {
 	FADUMP_PLATFORM_UNKNOWN = 0,
 	FADUMP_PLATFORM_PSERIES,
+	FADUMP_PLATFORM_POWERNV,
 };
 
 /*
@@ -152,6 +153,15 @@ int is_fadump_reserved_mem_contiguous(struct fw_dump *fadump_conf);
 extern int rtas_fadump_dt_scan(struct fw_dump *fadump_config, ulong node);
 #else
 static inline int rtas_fadump_dt_scan(struct fw_dump *fadump_config, ulong node)
+{
+	return 1;
+}
+#endif
+
+#ifdef CONFIG_PPC_POWERNV
+extern int opal_fadump_dt_scan(struct fw_dump *fadump_config, ulong node);
+#else
+static inline int opal_fadump_dt_scan(struct fw_dump *fadump_config, ulong node)
 {
 	return 1;
 }
