@@ -108,6 +108,8 @@ struct fw_dump {
 	unsigned long	cpu_notes_buf;
 	unsigned long	cpu_notes_buf_size;
 
+	unsigned long	boot_mem_dest_addr;
+
 	int		ibm_configure_kernel_dump;
 
 	unsigned long	fadump_enabled:1;
