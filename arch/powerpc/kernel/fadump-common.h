@@ -86,13 +86,24 @@ struct fadump_crash_info_header {
 	struct cpumask	online_mask;
 };
 
-struct fad_crash_memory_ranges {
+struct fadump_memory_range {
 	unsigned long long	base;
 	unsigned long long	size;
 };
 
 /* Platform specific callback functions */
 struct fadump_ops;
+
+/*
+ * Amount of memory (1024MB) to skip before making another attempt at
+ * reserving memory (after the previous attempt to reserve memory for
+ * FADump failed due to memory holes and/or reserved ranges) to reduce
+ * the likelihood of memory reservation failure.
+ */
+#define FADUMP_OFFSET_SIZE			0x40000000U
+
+/* Maximum no. of reserved ranges supported for processing. */
+#define FADUMP_MAX_RESERVED_RANGES		128
 
 /* Maximum number of memory regions kernel supports */
 #define FADUMP_MAX_MEM_REGS			128

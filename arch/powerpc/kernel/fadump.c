@@ -36,10 +36,13 @@
 static struct fw_dump fw_dump;
 
 static DEFINE_MUTEX(fadump_mutex);
-struct fad_crash_memory_ranges *crash_memory_ranges;
+struct fadump_memory_range *crash_memory_ranges;
 int crash_memory_ranges_size;
 int crash_mem_ranges;
 int max_crash_mem_ranges;
+
+struct fadump_memory_range reserved_ranges[FADUMP_MAX_RESERVED_RANGES];
+int reserved_ranges_cnt;
 
 #ifdef CONFIG_CMA
 static struct cma *fadump_cma;
@@ -104,12 +107,116 @@ int __init fadump_cma_init(void)
 static int __init fadump_cma_init(void) { return 1; }
 #endif /* CONFIG_CMA */
 
+/*
+ * Sort the reserved ranges in-place and merge adjacent ranges
+ * to minimize the reserved ranges count.
+ */
+static void __init sort_and_merge_reserved_ranges(void)
+{
+	unsigned long long base, size;
+	struct fadump_memory_range tmp_range;
+	int i, j, idx;
+
+	if (!reserved_ranges_cnt)
+		return;
+
+	/* Sort the reserved ranges */
+	for (i = 0; i < reserved_ranges_cnt; i++) {
+		idx = i;
+		for (j = i + 1; j < reserved_ranges_cnt; j++) {
+			if (reserved_ranges[idx].base > reserved_ranges[j].base)
+				idx = j;
+		}
+		if (idx != i) {
+			tmp_range = reserved_ranges[idx];
+			reserved_ranges[idx] = reserved_ranges[i];
+			reserved_ranges[i] = tmp_range;
+		}
+	}
+
+	/* Merge adjacent reserved ranges */
+	idx = 0;
+	for (i = 1; i < reserved_ranges_cnt; i++) {
+		base = reserved_ranges[i-1].base;
+		size = reserved_ranges[i-1].size;
+		if (reserved_ranges[i].base == (base + size))
+			reserved_ranges[idx].size += reserved_ranges[i].size;
+		else {
+			idx++;
+			if (i == idx)
+				continue;
+
+			reserved_ranges[idx] = reserved_ranges[i];
+		}
+	}
+	reserved_ranges_cnt = idx + 1;
+}
+
+static int __init add_reserved_range(unsigned long base,
+				     unsigned long size)
+{
+	int i;
+
+	if (reserved_ranges_cnt == FADUMP_MAX_RESERVED_RANGES) {
+		/* Compact reserved ranges and try again. */
+		sort_and_merge_reserved_ranges();
+		if (reserved_ranges_cnt == FADUMP_MAX_RESERVED_RANGES)
+			return 0;
+	}
+
+	i = reserved_ranges_cnt++;
+	reserved_ranges[i].base = base;
+	reserved_ranges[i].size = size;
+	return 1;
+}
+
+/*
+ * Scan reserved-ranges to consider them while reserving/releasing
+ * memory for FADump.
+ */
+static void __init early_init_dt_scan_reserved_ranges(unsigned long node)
+{
+	int len, ret;
+	unsigned long i;
+	const __be32 *prop;
+
+	/* reserved-ranges already scanned */
+	if (reserved_ranges_cnt != 0)
+		return;
+
+	prop = of_get_flat_dt_prop(node, "reserved-ranges", &len);
+
+	if (!prop)
+		return;
+
+	/*
+	 * Each reserved range is an (address,size) pair, 2 cells each,
+	 * totalling 4 cells per range.
+	 */
+	for (i = 0; i < len / (sizeof(*prop) * 4); i++) {
+		u64 base, size;
+
+		base = of_read_number(prop + (i * 4) + 0, 2);
+		size = of_read_number(prop + (i * 4) + 2, 2);
+
+		if (size) {
+			ret = add_reserved_range(base, size);
+			if (ret == 0)
+				pr_warn("some reserved ranges are ignored!\n");
+		}
+	}
+}
+
 /* Scan the Firmware Assisted dump configuration details. */
 int __init early_init_dt_scan_fw_dump(unsigned long node, const char *uname,
 				      int depth, void *data)
 {
-	if (depth != 1)
+	if (depth != 1) {
+		if (depth == 0)
+			early_init_dt_scan_reserved_ranges(node);
+
 		return 0;
+	}
 
 	if (strcmp(uname, "rtas") == 0)
 		return rtas_fadump_dt_scan(&fw_dump, node);
@@ -355,6 +462,26 @@ static int __init fadump_get_boot_mem_regions(void)
 	return ret;
 }
 
+static bool overlaps_with_reserved_ranges(ulong base, ulong end)
+{
+	int i, ret = 0;
+
+	for (i = 0; i < reserved_ranges_cnt; i++) {
+		ulong rbase = (ulong)reserved_ranges[i].base;
+		ulong rend = rbase + (ulong)reserved_ranges[i].size;
+
+		if (end <= rbase)
+			break;
+
+		if ((end > rbase) &&  (base < rend)) {
+			ret = 1;
+			break;
+		}
+	}
+
+	return ret;
+}
+
 static void __init fadump_reserve_crash_area(unsigned long base,
 					     unsigned long size)
 {
@@ -387,6 +514,9 @@ int __init fadump_reserve_mem(void)
 		pr_info("Firmware-Assisted Dump is not supported on this hardware\n");
 		goto error_out;
 	}
+
+	/* Compact reserved ranges */
+	sort_and_merge_reserved_ranges();
 
 	/*
 	 * Initialize boot memory size
@@ -447,10 +577,11 @@ int __init fadump_reserve_mem(void)
 		 */
 		while (base <= (memory_boundary - size)) {
 			if (memblock_is_region_memory(base, size) &&
-			    !memblock_is_region_reserved(base, size))
+			    !memblock_is_region_reserved(base, size) &&
+			    !overlaps_with_reserved_ranges(base, (base+size)))
 				break;
 
-			base += size;
+			base += FADUMP_OFFSET_SIZE;
 		}
 
 		if (base > (memory_boundary - size)) {
@@ -579,7 +710,7 @@ static void free_crash_memory_ranges(void)
  */
 static int allocate_crash_memory_ranges(void)
 {
-	struct fad_crash_memory_ranges *new_array;
+	struct fadump_memory_range *new_array;
 	u64 new_size;
 
 	new_size = crash_memory_ranges_size + PAGE_SIZE;
@@ -596,7 +727,7 @@ static int allocate_crash_memory_ranges(void)
 	crash_memory_ranges = new_array;
 	crash_memory_ranges_size = new_size;
 	max_crash_mem_ranges = (new_size /
-				sizeof(struct fad_crash_memory_ranges));
+				sizeof(struct fadump_memory_range));
 	return 0;
 }
 
