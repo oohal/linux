@@ -94,6 +94,9 @@ struct fad_crash_memory_ranges {
 /* Platform specific callback functions */
 struct fadump_ops;
 
+/* Maximum number of memory regions kernel supports */
+#define FADUMP_MAX_MEM_REGS			128
+
 /* Firmware-assisted dump configuration details. */
 struct fw_dump {
 	unsigned long	reserve_dump_area_start;
@@ -109,14 +112,23 @@ struct fw_dump {
 
 	unsigned long	cpu_state_data_size;
 	unsigned long	hpte_region_size;
+
 	unsigned long	boot_memory_size;
+	unsigned long	boot_mem_dest_addr;
+	unsigned long	boot_mem_regs_cnt;
+	unsigned long	boot_mem_addr[FADUMP_MAX_MEM_REGS];
+	unsigned long	boot_mem_size[FADUMP_MAX_MEM_REGS];
+	unsigned long	boot_mem_top;
 
 	unsigned long	fadumphdr_addr;
 	unsigned long	cpu_notes_buf;
 	unsigned long	cpu_notes_buf_size;
 
-	unsigned long	boot_mem_dest_addr;
-
+	/*
+	 * Maximum size supported by firmware to copy from source to
+	 * destination address per entry.
+	 */
+	unsigned long	max_copy_size;
 	u64		kernel_metadata;
 
 	int		ibm_configure_kernel_dump;

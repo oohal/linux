@@ -56,7 +56,14 @@ static void rtas_fadump_update_config(struct fw_dump *fadump_conf,
 static void rtas_fadump_get_config(struct fw_dump *fadump_conf,
 				   const struct rtas_fadump_mem_struct *fdm)
 {
-	fadump_conf->boot_memory_size = be64_to_cpu(fdm->rmr_region.source_len);
+	fadump_conf->boot_mem_addr[0] =
+		be64_to_cpu(fdm->rmr_region.source_address);
+	fadump_conf->boot_mem_size[0] =
+		be64_to_cpu(fdm->rmr_region.source_len);
+	fadump_conf->boot_memory_size = fadump_conf->boot_mem_size[0];
+
+	fadump_conf->boot_mem_top = fadump_conf->boot_memory_size;
+	fadump_conf->boot_mem_regs_cnt = 1;
 	rtas_fadump_update_config(fadump_conf, fdm);
 }
 
@@ -534,6 +541,9 @@ int __init rtas_fadump_dt_scan(struct fw_dump *fadump_conf, ulong node)
 	fadump_conf->ops		= &rtas_fadump_ops;
 	fadump_conf->fadump_platform	= FADUMP_PLATFORM_PSERIES;
 	fadump_conf->fadump_supported	= 1;
+
+	/* Firmware supports 64-bit value for size, align it to pagesize. */
+	fadump_conf->max_copy_size = _ALIGN_DOWN(U64_MAX, PAGE_SIZE);
 
 	/*
 	 * The 'ibm,kernel-dump' rtas node is present only if there is

@@ -16,9 +16,6 @@
 /* OPAL FADump structure format version */
 #define OPAL_FADUMP_VERSION			0x1
 
-/* Maximum number of memory regions kernel supports */
-#define OPAL_FADUMP_MAX_MEM_REGS		128
-
 /*
  * FADump memory structure for storing kernel metadata needed to
  * register-for/process crash dump. The address of this structure will
@@ -31,7 +28,7 @@ struct opal_fadump_mem_struct {
 	u16	region_cnt;		/* number of regions */
 	u16	registered_regions;	/* Regions registered for MPIPL */
 	u64	fadumphdr_addr;
-	struct opal_mpipl_region	rgn[OPAL_FADUMP_MAX_MEM_REGS];
+	struct opal_mpipl_region	rgn[FADUMP_MAX_MEM_REGS];
 } __attribute__((packed));
 
 #endif /* __PPC64_OPAL_FA_DUMP_H__ */

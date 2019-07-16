@@ -30,6 +30,8 @@ static struct opal_fadump_mem_struct *opal_fdm;
 static void opal_fadump_update_config(struct fw_dump *fadump_conf,
 				      const struct opal_fadump_mem_struct *fdm)
 {
+	pr_debug("Boot memory regions count: %d\n", fdm->region_cnt);
+
 	/*
 	 * The destination address of the first boot memory region is the
 	 * destination address of boot memory regions.
@@ -44,15 +46,22 @@ static void opal_fadump_update_config(struct fw_dump *fadump_conf,
 static ulong opal_fadump_init_mem_struct(struct fw_dump *fadump_conf)
 {
 	ulong addr = fadump_conf->reserve_dump_area_start;
+	int i;
 
 	opal_fdm = __va(fadump_conf->kernel_metadata);
 	opal_fdm->version = OPAL_FADUMP_VERSION;
-	opal_fdm->region_cnt = 1;
+	opal_fdm->region_cnt = 0;
 	opal_fdm->registered_regions = 0;
-	opal_fdm->rgn[0].src	= RMA_START;
-	opal_fdm->rgn[0].dest	= addr;
-	opal_fdm->rgn[0].size	= fadump_conf->boot_memory_size;
-	addr += fadump_conf->boot_memory_size;
+
+	/* RMA regions */
+	for (i = 0; i < fadump_conf->boot_mem_regs_cnt; i++) {
+		opal_fdm->rgn[i].src	= fadump_conf->boot_mem_addr[i];
+		opal_fdm->rgn[i].dest	= addr;
+		opal_fdm->rgn[i].size	= fadump_conf->boot_mem_size[i];
+
+		opal_fdm->region_cnt++;
+		addr += fadump_conf->boot_mem_size[i];
+	}
 
 	/*
 	 * Kernel metadata is passed to f/w and retrieved in capture kerenl.
@@ -235,6 +244,12 @@ int __init opal_fadump_dt_scan(struct fw_dump *fadump_conf, ulong node)
 	fadump_conf->ops		= &opal_fadump_ops;
 	fadump_conf->fadump_platform	= FADUMP_PLATFORM_POWERNV;
 	fadump_conf->fadump_supported	= 1;
+
+	/*
+	 * Firmware currently supports only 32-bit value for size,
+	 * align it to pagesize.
+	 */
+	fadump_conf->max_copy_size = _ALIGN_DOWN(U32_MAX, PAGE_SIZE);
 
 	return 1;
 }
