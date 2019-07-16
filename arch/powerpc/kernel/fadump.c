@@ -35,6 +35,9 @@
 
 static struct fw_dump fw_dump;
 
+static void __init fadump_reserve_crash_area(unsigned long base);
+
+#ifndef CONFIG_PRESERVE_FA_DUMP
 static DEFINE_MUTEX(fadump_mutex);
 struct fadump_memory_range *crash_memory_ranges;
 int crash_memory_ranges_size;
@@ -204,26 +207,6 @@ static void __init early_init_dt_scan_reserved_ranges(unsigned long node)
 				pr_warn("some reserved ranges are ignored!\n");
 		}
 	}
-}
-
-/* Scan the Firmware Assisted dump configuration details. */
-int __init early_init_dt_scan_fw_dump(unsigned long node, const char *uname,
-				      int depth, void *data)
-{
-	if (depth != 1) {
-		if (depth == 0)
-			early_init_dt_scan_reserved_ranges(node);
-
-		return 0;
-	}
-
-	if (strcmp(uname, "rtas") == 0)
-		return rtas_fadump_dt_scan(&fw_dump, node);
-
-	if (strcmp(uname, "ibm,opal") == 0)
-		return opal_fadump_dt_scan(&fw_dump, node);
-
-	return 0;
 }
 
 /*
@@ -481,26 +464,6 @@ static bool overlaps_with_reserved_ranges(ulong base, ulong end)
 	return ret;
 }
 
-static void __init fadump_reserve_crash_area(unsigned long base,
-					     unsigned long size)
-{
-	struct memblock_region *reg;
-	unsigned long mstart, mend, msize;
-
-	for_each_memblock(memory, reg) {
-		mstart = max_t(unsigned long, base, reg->base);
-		mend = reg->base + reg->size;
-		mend = min(base + size, mend);
-
-		if (mstart < mend) {
-			msize = mend - mstart;
-			memblock_reserve(mstart, msize);
-			pr_info("Reserved %ldMB of memory at %#016lx for saving crash dump\n",
-				(msize >> 20), mstart);
-		}
-	}
-}
-
 int __init fadump_reserve_mem(void)
 {
 	int ret = 1;
@@ -558,12 +521,11 @@ int __init fadump_reserve_mem(void)
 #endif
 		/*
 		 * If last boot has crashed then reserve all the memory
-		 * above boot_memory_size so that we don't touch it until
+		 * above boot memory size so that we don't touch it until
 		 * dump is written to disk by userspace tool. This memory
-		 * will be released for general use once the dump is saved.
+		 * can be released for general use by invalidating fadump.
 		 */
-		size = memory_boundary - base;
-		fadump_reserve_crash_area(base, size);
+		fadump_reserve_crash_area(base);
 
 		pr_debug("fadumphdr_addr = %#016lx\n", fw_dump.fadumphdr_addr);
 		fw_dump.reserve_dump_area_start = base;
@@ -611,11 +573,6 @@ int __init fadump_reserve_mem(void)
 error_out:
 	fw_dump.fadump_enabled = 0;
 	return 0;
-}
-
-unsigned long __init arch_reserved_kernel_pages(void)
-{
-	return memblock_reserved_size() / PAGE_SIZE;
 }
 
 /* Look for fadump= cmdline option. */
@@ -1375,3 +1332,76 @@ int __init setup_fadump(void)
 	return 1;
 }
 subsys_initcall(setup_fadump);
+#else /* !CONFIG_PRESERVE_FA_DUMP */
+
+static inline void early_init_dt_scan_reserved_ranges(unsigned long node) { }
+
+/*
+ * When dump is active but PRESERVE_FA_DUMP is enabled on the kernel,
+ * preserve crash data. The subsequent memory preserving kernel boot
+ * is likely to process this crash data.
+ */
+int __init fadump_reserve_mem(void)
+{
+	if (fw_dump.dump_active) {
+		/*
+		 * If last boot has crashed then reserve all the memory
+		 * above boot memory to preserve crash data.
+		 */
+		pr_info("Preserving crash data for processing in next boot.\n");
+		fadump_reserve_crash_area(PAGE_ALIGN(fw_dump.boot_mem_top));
+	} else
+		pr_debug("FADump-aware kernel..\n");
+
+	return 1;
+}
+#endif /* CONFIG_PRESERVE_FA_DUMP */
+
+/* Preserve everything above the base address */
+static void __init fadump_reserve_crash_area(unsigned long base)
+{
+	struct memblock_region *reg;
+	unsigned long mstart, msize;
+
+	for_each_memblock(memory, reg) {
+		mstart = reg->base;
+		msize  = reg->size;
+
+		if ((mstart + msize) < base)
+			continue;
+
+		if (mstart < base) {
+			msize -= (base - mstart);
+			mstart = base;
+		}
+
+		pr_info("Reserving %luMB of memory at %#016lx for preserving crash data",
+			(msize >> 20), mstart);
+		memblock_reserve(mstart, msize);
+	}
+}
+
+unsigned long __init arch_reserved_kernel_pages(void)
+{
+	return memblock_reserved_size() / PAGE_SIZE;
+}
+
+/* Scan the Firmware Assisted dump configuration details. */
+int __init early_init_dt_scan_fw_dump(unsigned long node, const char *uname,
+				      int depth, void *data)
+{
+	if (depth != 1) {
+		if (depth == 0)
+			early_init_dt_scan_reserved_ranges(node);
+
+		return 0;
+	}
+
+	if (strcmp(uname, "rtas") == 0)
+		return rtas_fadump_dt_scan(&fw_dump, node);
+
+	if (strcmp(uname, "ibm,opal") == 0)
+		return opal_fadump_dt_scan(&fw_dump, node);
+
+	return 0;
+}

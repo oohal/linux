@@ -13,6 +13,8 @@
 #ifndef __PPC64_OPAL_FA_DUMP_H__
 #define __PPC64_OPAL_FA_DUMP_H__
 
+#ifndef CONFIG_PRESERVE_FA_DUMP
+
 /* OPAL FADump structure format version */
 #define OPAL_FADUMP_VERSION			0x1
 
@@ -30,6 +32,7 @@ struct opal_fadump_mem_struct {
 	u64	fadumphdr_addr;
 	struct opal_mpipl_region	rgn[FADUMP_MAX_MEM_REGS];
 } __attribute__((packed));
+#endif /* !CONFIG_PRESERVE_FA_DUMP */
 
 /*
  * CPU state data is provided by f/w. Below are the definitions
