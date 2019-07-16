@@ -145,6 +145,11 @@ static int rtas_fadump_setup_kernel_metadata(struct fw_dump *fadump_conf)
 	return 0;
 }
 
+static ulong rtas_fadump_get_bootmem_min(void)
+{
+	return RTAS_FADUMP_MIN_BOOT_MEM;
+}
+
 static int rtas_fadump_register_fadump(struct fw_dump *fadump_conf)
 {
 	int rc, err = -EIO;
@@ -514,6 +519,7 @@ static struct fadump_ops rtas_fadump_ops = {
 	.init_fadump_mem_struct		= rtas_fadump_init_mem_struct,
 	.get_kernel_metadata_size	= rtas_fadump_get_kernel_metadata_size,
 	.setup_kernel_metadata		= rtas_fadump_setup_kernel_metadata,
+	.get_bootmem_min		= rtas_fadump_get_bootmem_min,
 	.register_fadump		= rtas_fadump_register_fadump,
 	.unregister_fadump		= rtas_fadump_unregister_fadump,
 	.invalidate_fadump		= rtas_fadump_invalidate_fadump,
