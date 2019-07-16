@@ -100,6 +100,12 @@ struct fw_dump {
 	/* cmd line option during boot */
 	unsigned long	reserve_bootvar;
 
+	/*
+	 * Start address of preserve area. This memory is reserved
+	 * permanently (production or capture kernel) for FADump.
+	 */
+	unsigned long	preserv_area_start;
+
 	unsigned long	cpu_state_data_size;
 	unsigned long	hpte_region_size;
 	unsigned long	boot_memory_size;
