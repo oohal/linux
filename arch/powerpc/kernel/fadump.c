@@ -111,7 +111,7 @@ static int __init fadump_cma_init(void) { return 1; }
  * Sort the reserved ranges in-place and merge adjacent ranges
  * to minimize the reserved ranges count.
  */
-static void __init sort_and_merge_reserved_ranges(void)
+static void sort_and_merge_reserved_ranges(void)
 {
 	unsigned long long base, size;
 	struct fadump_memory_range tmp_range;
@@ -152,8 +152,7 @@ static void __init sort_and_merge_reserved_ranges(void)
 	reserved_ranges_cnt = idx + 1;
 }
 
-static int __init add_reserved_range(unsigned long base,
-				     unsigned long size)
+static int add_reserved_range(unsigned long base, unsigned long size)
 {
 	int i;
 
@@ -876,7 +875,7 @@ static int fadump_setup_crash_memory_ranges(void)
 				continue;
 		}
 
-		/* add this range excluding the reserved dump area. */
+		/* add this range excluding the preserve area. */
 		ret = fadump_exclude_reserved_area(start, end);
 		if (ret)
 			return ret;
@@ -1106,33 +1105,57 @@ static void fadump_release_reserved_area(unsigned long start, unsigned long end)
 			if (tend == end_pfn)
 				break;
 
-			start_pfn = tend + 1;
+			start_pfn = tend;
 		}
 	}
 }
 
 /*
- * Release the memory that was reserved in early boot to preserve the memory
- * contents. The released memory will be available for general use.
+ * Release the memory that was reserved during early boot to preserve the
+ * crash'ed kernel's memory contents except preserve area (permanent
+ * reservation) and reserved ranges used by F/W. The released memory will
+ * be available for general use.
  */
 static void fadump_release_memory(unsigned long begin, unsigned long end)
 {
+	int i;
 	unsigned long ra_start, ra_end;
-
-	ra_start = fw_dump.reserve_dump_area_start;
-	ra_end = ra_start + fw_dump.reserve_dump_area_size;
+	unsigned long tstart;
 
 	/*
-	 * exclude the dump reserve area. Will reuse it for next
-	 * fadump registration.
+	 * Add memory to permanently preserve to reserved ranges list
+	 * and exclude all these ranges while releasing memory.
 	 */
-	if (begin < ra_end && end > ra_start) {
-		if (begin < ra_start)
-			fadump_release_reserved_area(begin, ra_start);
-		if (end > ra_end)
-			fadump_release_reserved_area(ra_end, end);
-	} else
-		fadump_release_reserved_area(begin, end);
+	i = add_reserved_range(fw_dump.reserve_dump_area_start,
+			       fw_dump.reserve_dump_area_size);
+	if (i == 0) {
+		/*
+		 * Reached the MAX reserved ranges count. To ensure reserved
+		 * dump area is excluded (as it will be reused for next
+		 * FADump registration), ignore the last reserved range and
+		 * add reserved dump area instead.
+		 */
+		reserved_ranges_cnt--;
+		add_reserved_range(fw_dump.reserve_dump_area_start,
+				   fw_dump.reserve_dump_area_size);
+	}
+	sort_and_merge_reserved_ranges();
+
+	tstart = begin;
+	for (i = 0; i < reserved_ranges_cnt; i++) {
+		ra_start = reserved_ranges[i].base;
+		ra_end = ra_start + reserved_ranges[i].size;
+
+		if (tstart >= ra_end)
+			continue;
+
+		if (tstart < ra_start)
+			fadump_release_reserved_area(tstart, ra_start);
+		tstart = ra_end;
+	}
+
+	if (tstart < end)
+		fadump_release_reserved_area(tstart, end);
 }
 
 static void fadump_invalidate_release_mem(void)
