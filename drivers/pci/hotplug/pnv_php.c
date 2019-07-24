@@ -955,6 +955,9 @@ static int __init pnv_php_init(void)
 	for_each_compatible_node(dn, NULL, "ibm,ioda2-phb")
 		pnv_php_register(dn);
 
+	for_each_compatible_node(dn, NULL, "ibm,ioda3-phb")
+		pnv_php_register(dn);
+
 	return 0;
 }
 
@@ -963,6 +966,9 @@ static void __exit pnv_php_exit(void)
 	struct device_node *dn;
 
 	for_each_compatible_node(dn, NULL, "ibm,ioda2-phb")
+		pnv_php_unregister(dn);
+
+	for_each_compatible_node(dn, NULL, "ibm,ioda3-phb")
 		pnv_php_unregister(dn);
 }
 
