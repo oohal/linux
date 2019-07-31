@@ -154,6 +154,16 @@ struct eeh_dev {
 };
 
 /* "fmt" must be a simple literal string */
+#define EEH_PE_PRINT(level, pe, fmt, ...) \
+	pr_##level("PCI %04x#%04x: EEH:  " fmt, \
+	pe->phb->global_number, \
+	(pe ? pe->addr : 0xffff), ##__VA_ARGS__)
+
+#define eeh_pe_dbg(pe, fmt, ...) EEH_PE_PRINT(debug, (pe), fmt, ##__VA_ARGS__)
+#define eeh_pe_info(pe, fmt, ...) EEH_PE_PRINT(info, (pe), fmt, ##__VA_ARGS__)
+#define eeh_pe_warn(pe, fmt, ...) EEH_PE_PRINT(warn, (pe), fmt, ##__VA_ARGS__)
+#define eeh_pe_err(pe, fmt, ...) EEH_PE_PRINT(err, (pe), fmt, ##__VA_ARGS__)
+
 #define EEH_EDEV_PRINT(level, edev, fmt, ...) \
 	pr_##level("PCI %04x:%02x:%02x.%x#%04x: EEH: " fmt, \
 	(edev)->controller->global_number, PCI_BUSNO((edev)->bdfn), \
