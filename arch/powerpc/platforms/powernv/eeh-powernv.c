@@ -109,6 +109,45 @@ static irqreturn_t pnv_eeh_event(int irq, void *data)
 }
 
 #ifdef CONFIG_DEBUG_FS
+
+static ssize_t pnv_eeh_dump_pe_tree(struct file *filp,
+				const char __user *user_buf,
+				size_t count, loff_t *ppos)
+{
+	struct pci_controller *hose = filp->private_data;
+	struct eeh_dev *edev, *tmp;
+	struct eeh_pe *root, *pe;
+
+	/* Retrieve PE */
+	root = eeh_phb_pe_get(hose);
+	if (!root)
+		return -ENODEV;
+
+	eeh_for_each_pe(root, pe) {
+		struct eeh_pe *parent = pe->parent;
+		struct eeh_pe *tmp_pe = pe;
+		char nest_buf[16];
+		int nest = 0;
+
+		memset(nest_buf, 0, sizeof(nest_buf));
+
+		while (tmp_pe && nest < 15) {
+			tmp_pe = tmp_pe->parent;
+			nest_buf[nest++] = '\t';
+		}
+
+		eeh_pe_err(pe, "%stype: %x, state: %x, parent: #%x\n",
+			   nest_buf, pe->type, pe->state,
+			   parent ? parent->addr : 0xf00c);
+
+		eeh_pe_for_each_dev(pe, edev, tmp) {
+			eeh_edev_err(edev, "%s\tmode: %x\n", nest_buf, edev->mode);
+		}
+	}
+
+	return count;
+}
+
 static ssize_t pnv_eeh_ei_write(struct file *filp,
 				const char __user *user_buf,
 				size_t count, loff_t *ppos)
@@ -143,6 +182,12 @@ static ssize_t pnv_eeh_ei_write(struct file *filp,
 	ret = eeh_ops->err_inject(pe, type, func, addr, mask);
 	return ret < 0 ? ret : count;
 }
+
+static const struct file_operations pnv_eeh_dump_pe_tree_fops = {
+	.open	= simple_open,
+	.llseek	= no_llseek,
+	.write	= pnv_eeh_dump_pe_tree,
+};
 
 static const struct file_operations pnv_eeh_ei_fops = {
 	.open	= simple_open,
@@ -269,6 +314,10 @@ int pnv_eeh_post_init(void)
 		debugfs_create_file("err_injct_inboundB", 0600,
 				    phb->dbgfs, hose,
 				    &pnv_eeh_dbgfs_ops_inbB);
+
+		debugfs_create_file("dump_pe_tree", 0200,
+				    phb->dbgfs, hose,
+				    &pnv_eeh_dump_pe_tree_fops);
 #endif /* CONFIG_DEBUG_FS */
 	}
 
