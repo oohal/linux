@@ -9343,7 +9343,12 @@ static void i40e_clean_adminq_subtask(struct i40e_pf *pf)
 			dev_info(&pf->pdev->dev,
 				 "ARQ: Unknown event 0x%04x ignored\n",
 				 opcode);
-			break;
+
+				/* HACK: shutdown all operations so we don't die
+				 * horribly*/
+				if (!test_bit(__I40E_SUSPENDED, pf->state))
+					i40e_prep_for_reset(pf, false);
+				break;
 		}
 	} while (i++ < pf->adminq_work_limit);
 
