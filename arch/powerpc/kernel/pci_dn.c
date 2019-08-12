@@ -247,6 +247,19 @@ void remove_dev_pci_data(struct pci_dev *pdev)
 			/* Release EEH device for the VF */
 			edev = pdn_to_eeh_dev(pdn);
 			if (edev) {
+				/*
+				 * We can end up here if we have an SR-IOV PF
+				 * with a driver that does not support recovery.
+				 *
+				 * In that case the pci_dev for each VF has been
+				 * removed, but the PE for that VF and the
+				 * eeh_dev are still alive. We can't re-enable
+				 * VFs without help from the driver, so we need
+				 * to throw away the old EEH state.
+				 */
+				if (edev->pe)
+					eeh_rmv_from_parent_pe(edev);
+
 				pdn->edev = NULL;
 				kfree(edev);
 			}
