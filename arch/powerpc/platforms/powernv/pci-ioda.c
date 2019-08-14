@@ -3934,6 +3934,42 @@ static void pnv_npu2_opencapi_cfg_size_fixup(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_EARLY(PCI_ANY_ID, PCI_ANY_ID, pnv_npu2_opencapi_cfg_size_fixup);
 
+static void __pnv_prefetch_hack_one(struct resource *r, struct pci_dev *pdev)
+{
+	if (!resource_size(r))
+		return;
+
+	if (r->flags & IORESOURCE_MEM_64) {
+		if (!(r->flags & IORESOURCE_PREFETCH))
+			pci_err(pdev, "Hacked BAR %pR\n", r);
+		r->flags |= IORESOURCE_PREFETCH;
+	}
+}
+
+static void pnv_prefetch_bar_hack(struct pci_dev *dev)
+{
+	struct pci_controller *hose = pci_bus_to_host(dev->bus);
+	struct pnv_phb *phb = hose->private_data;
+	int i;
+
+	if (!machine_is(powernv) || phb->type != PNV_PHB_IODA2)
+		return;
+
+	/* only apply to pcie devices */
+	if (!dev->pcie_cap)
+		return;
+
+	/* Device-specific resources */
+	for (i = PCI_STD_RESOURCES; i <= PCI_STD_RESOURCE_END; i++)
+		__pnv_prefetch_hack_one(&dev->resource[i], dev);
+
+#ifdef CONFIG_PCI_IOV
+	for (i = PCI_IOV_RESOURCES; i <= PCI_IOV_RESOURCE_END; i++)
+		__pnv_prefetch_hack_one(&dev->resource[i], dev);
+#endif
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_ANY_ID, PCI_ANY_ID, pnv_prefetch_bar_hack);
+
 void __init pnv_pci_init_ioda_hub(struct device_node *np)
 {
 	struct device_node *phbn;
