@@ -168,6 +168,42 @@ struct pnv_phb {
 	u8			*diag_data;
 };
 
+#ifdef CONFIG_PCI_IOV
+/*
+ * For SR-IOV we want to put each VF's MMIO resource in to a seperate PE.
+ * This requires a bit of acrobatics with the MMIO -> PE configuration
+ * and this structure is used to keep track of it all.
+ */
+struct pnv_iov_data {
+	/* number of VFs IOV BAR expanded. FIXME: rename this to something less bad */
+	u16     vfs_expanded;
+
+	/* number of VFs enabled */
+	u16     num_vfs;
+	unsigned int *pe_num_map;	/* PE# for the first VF PE or array */
+
+	/* Did we map the VF BARs with single-PE IODA BARs? */
+	bool    m64_single_mode;
+
+	int     (*m64_map)[PCI_SRIOV_NUM_BARS];
+#define IODA_INVALID_M64        (-1)
+
+	/*
+	 * If we map the SR-IOV BARs with a segmented window then
+	 * parts of that window will be "claimed" by other PEs.
+	 *
+	 * "holes" here is used to reserve the leading portion
+	 * of the window that is used by other (non VF) PEs.
+	 */
+	struct resource holes[PCI_SRIOV_NUM_BARS];
+};
+
+static inline struct pnv_iov_data *pnv_iov_get(struct pci_dev *pdev)
+{
+	return pdev->dev.archdata.iov_data;
+}
+#endif
+
 extern struct pci_ops pnv_pci_ops;
 
 void pnv_pci_dump_phb_diag_data(struct pci_controller *hose,
