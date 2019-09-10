@@ -34,6 +34,15 @@ eeh_supported() {
 	grep -q 'EEH Subsystem is enabled' /proc/powerpc/eeh
 }
 
+__eeh_get_driver() {
+	if ! test -e "/sys/bus/pci/devices/$1/driver" ; then
+		return 1;
+	fi
+
+	basename $(readlink -f "/sys/bus/pci/devices/$1/driver")
+	return 0;
+}
+
 eeh_one_dev() {
 	local dev="$1"
 
@@ -44,6 +53,8 @@ eeh_one_dev() {
 		echo "Error: '$dev' must be a sysfs device name (DDDD:BB:DD.F)"
 		return 1;
 	fi
+
+	local driver="$(__eeh_get_driver $dev)"
 
 	# Break it
 	echo $dev >/sys/kernel/debug/powerpc/eeh_dev_break
@@ -59,7 +70,9 @@ eeh_one_dev() {
 
 	for i in `seq 0 ${max_wait}` ; do
 		if pe_ok $dev ; then
-			break;
+			if [ "$(__eeh_get_driver $dev)" == "$driver" ] ; then
+				break;
+			fi
 		fi
 		echo "$dev, waited $i/${max_wait}"
 		sleep 1
