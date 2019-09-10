@@ -1183,7 +1183,6 @@ static struct pnv_ioda_pe *pnv_ioda_setup_npu_PE(struct pci_dev *npu_pdev)
 	long rid;
 	struct pnv_ioda_pe *pe;
 	struct pci_dev *gpu_pdev;
-	struct pci_dn *npu_pdn;
 	struct pnv_phb *phb = pci_bus_to_pnvhb(npu_pdev->bus);
 
 	/*
@@ -1210,9 +1209,8 @@ static struct pnv_ioda_pe *pnv_ioda_setup_npu_PE(struct pci_dev *npu_pdev)
 			dev_info(&npu_pdev->dev,
 				"Associating to existing PE %x\n", pe_num);
 			pci_dev_get(npu_pdev);
-			npu_pdn = pci_get_pdn(npu_pdev);
-			rid = npu_pdev->bus->number << 8 | npu_pdn->devfn;
-			npu_pdn->pe_number = pe_num;
+
+			rid = npu_pdev->bus->number << 8 | npu_pdev->devfn;
 			phb->ioda.pe_rmap[rid] = pe->pe_number;
 
 			/* Map the PE to this link */
