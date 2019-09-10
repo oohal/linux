@@ -457,12 +457,35 @@ static enum pci_ers_result eeh_report_failure(struct eeh_dev *edev,
 	return rc;
 }
 
+#ifdef CONFIG_PCI_IOV
+/* FIXME: this should probably go in drivers/pci/iov.c */
+static int eeh_find_vf_index(struct pci_dev *physfn, u16 vf_bdfn)
+{
+	u16 vf_bus, vf_devfn;
+	int i;
+
+	vf_bus = vf_bdfn >> 8;
+	vf_devfn = vf_bdfn & 0xff;
+
+	for (i = 0; i < pci_num_vf(physfn); i++) {
+		if (pci_iov_virtfn_bus(physfn, i) != vf_bus)
+			continue;
+		if (pci_iov_virtfn_devfn(physfn, i) != vf_devfn)
+			continue;
+		return i;
+	}
+
+	WARN_ON(1);
+	return -1;
+}
+
 static void *eeh_add_virt_device(struct eeh_dev *edev)
 {
-	struct pci_driver *driver;
 	struct pci_dev *dev = eeh_dev_to_pci_dev(edev);
+	struct pci_driver *driver;
+	int vf_index;
 
-	if (!(edev->physfn)) {
+	if (!edev->physfn) {
 		eeh_edev_warn(edev, "Not for VF\n");
 		return NULL;
 	}
@@ -476,11 +499,18 @@ static void *eeh_add_virt_device(struct eeh_dev *edev)
 		eeh_pcid_put(dev);
 	}
 
-#ifdef CONFIG_PCI_IOV
-	pci_iov_add_virtfn(edev->physfn, eeh_dev_to_pdn(edev)->vf_index);
-#endif
+	vf_index = eeh_find_vf_index(edev->physfn, edev->bdfn);
+	pci_iov_add_virtfn(edev->physfn, vf_index);
+
 	return NULL;
 }
+#else
+static void *eeh_add_virt_device(struct eeh_dev *edev)
+{
+	WARN_ON(1);
+	return NULL;
+}
+#endif
 
 static void eeh_rmv_device(struct eeh_dev *edev, void *userdata)
 {
@@ -521,9 +551,9 @@ static void eeh_rmv_device(struct eeh_dev *edev, void *userdata)
 
 	if (edev->physfn) {
 #ifdef CONFIG_PCI_IOV
-		struct pci_dn *pdn = eeh_dev_to_pdn(edev);
+		int vf_index = eeh_find_vf_index(edev->physfn, edev->bdfn);
 
-		pci_iov_remove_virtfn(edev->physfn, pdn->vf_index);
+		pci_iov_remove_virtfn(edev->physfn, vf_index);
 		edev->pdev = NULL;
 #endif
 		if (rmv_data)
