@@ -8,14 +8,14 @@ if ! eeh_supported ; then
 	exit 0;
 fi
 
-if [ ! -e "/sys/kernel/debug/powerpc/eeh_dev_check" ] && \
+if [ ! -e "/sys/kernel/debug/powerpc/eeh_dev_check" ] || \
    [ ! -e "/sys/kernel/debug/powerpc/eeh_dev_break" ] ; then
 	echo "debugfs EEH testing files are missing. Is debugfs mounted?"
 	exit 1;
 fi
 
 pre_lspci=`mktemp`
-lspci > $pre_lspci
+lspci -k > $pre_lspci
 
 # Bump the max freeze count to something absurd so we don't
 # trip over it while breaking things.
@@ -41,7 +41,7 @@ for dev in `ls -1 /sys/bus/pci/devices/ | grep '\.0$'` ; do
 		continue;
 	fi
 
-	# Don't inject errosr into an already-frozen PE. This happens with
+	# Don't inject errors into an already-frozen PE. This happens with
 	# PEs that contain multiple PCI devices (e.g. multi-function cards)
 	# and injecting new errors during the recovery process will probably
 	# result in the recovery failing and the device being marked as
@@ -76,7 +76,7 @@ for dev in $devices ; do
 done
 
 echo "$failed devices failed to recover ($dev_count tested)"
-lspci | diff -u $pre_lspci -
+lspci -k | diff -u $pre_lspci -
 rm -f $pre_lspci
 
 exit $failed
