@@ -38,15 +38,6 @@
 
 static int eeh_event_irq = -EINVAL;
 
-void pnv_pcibios_bus_add_device(struct pci_dev *pdev)
-{
-	if (eeh_has_flag(EEH_FORCE_DISABLED))
-		return;
-
-	dev_dbg(&pdev->dev, "EEH: Setting up device\n");
-	eeh_add_device_late(pdev);
-}
-
 static int pnv_eeh_init(void)
 {
 	struct pci_controller *hose;
@@ -90,7 +81,6 @@ static int pnv_eeh_init(void)
 	}
 
 	eeh_set_pe_aux_size(max_diag_size);
-	ppc_md.pcibios_bus_add_device = pnv_pcibios_bus_add_device;
 
 	return 0;
 }

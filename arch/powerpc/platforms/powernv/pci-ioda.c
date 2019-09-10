@@ -1117,34 +1117,6 @@ static struct pnv_ioda_pe *pnv_ioda_setup_dev_PE(struct pci_dev *dev)
 	return pe;
 }
 
-static void pnv_ioda_setup_same_PE(struct pci_bus *bus, struct pnv_ioda_pe *pe)
-{
-	struct pci_dev *dev;
-
-	list_for_each_entry(dev, &bus->devices, bus_list) {
-		struct pci_dn *pdn = pci_get_pdn(dev);
-
-		if (pdn == NULL) {
-			pr_warn("%s: No device node associated with device !\n",
-				pci_name(dev));
-			continue;
-		}
-
-		/*
-		 * In partial hotplug case, the PCI device might be still
-		 * associated with the PE and needn't attach it to the PE
-		 * again.
-		 */
-		if (pdn->pe_number != IODA_INVALID_PE)
-			continue;
-
-		pe->device_count++;
-		pdn->pe_number = pe->pe_number;
-		if ((pe->flags & PNV_IODA_PE_BUS_ALL) && dev->subordinate)
-			pnv_ioda_setup_same_PE(dev->subordinate, pe);
-	}
-}
-
 /*
  * There're 2 types of PCI bus sensitive PEs: One that is compromised of
  * single PCI bus. Another one that contains the primary PCI bus and its
@@ -1162,11 +1134,8 @@ static struct pnv_ioda_pe *pnv_ioda_setup_bus_PE(struct pci_bus *bus, bool all)
 	 * We should reuse it instead of allocating a new one.
 	 */
 	pe_num = phb->ioda.pe_rmap[bus->number << 8];
-	if (pe_num != IODA_INVALID_PE) {
-		pe = &phb->ioda.pe_array[pe_num];
-		pnv_ioda_setup_same_PE(bus, pe);
+	if (WARN_ON(pe_num != IODA_INVALID_PE))
 		return NULL;
-	}
 
 	/* PE number for root bus should have been reserved */
 	if (pci_is_root_bus(bus) &&
@@ -1207,9 +1176,6 @@ static struct pnv_ioda_pe *pnv_ioda_setup_bus_PE(struct pci_bus *bus, bool all)
 		pe->pbus = NULL;
 		return NULL;
 	}
-
-	/* Associate it with all child devices */
-	pnv_ioda_setup_same_PE(bus, pe);
 
 	/* Put PE to the list */
 	list_add_tail(&pe->list, &phb->ioda.pe_list);
@@ -3273,17 +3239,22 @@ static void pnv_pci_fixup_bridge_resources(struct pci_bus *bus,
 	}
 }
 
-static void pnv_pci_setup_bridge(struct pci_bus *bus, unsigned long type)
+struct pnv_ioda_pe *pnv_pci_configure_bus(struct pci_bus *bus)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
 	struct pci_dev *bridge = bus->self;
-	struct pnv_ioda_pe *pe;
-	bool all = (pci_pcie_type(bridge) == PCI_EXP_TYPE_PCI_BRIDGE);
+	struct pnv_ioda_pe *pe = NULL;
 
-	/* Extend bridge's windows if necessary */
-	pnv_pci_fixup_bridge_resources(bus, type);
+	/*
+	 * This doesn't really make any sense. we should only assign
+	 * the subordinate buses to this PE if there's no room to put
+	 * them into a seperate PE
+	 */
+	bool all = false;
 
-	/* The PE for root bus should be realized before any one else */
+	/* The PE for root bus should be realized before any one else
+	 * XXX: Can we do this during PHB init?
+	 */
 	if (!phb->ioda.root_pe_populated) {
 		pe = pnv_ioda_setup_bus_PE(phb->hose->bus, false);
 		if (pe) {
@@ -3292,21 +3263,21 @@ static void pnv_pci_setup_bridge(struct pci_bus *bus, unsigned long type)
 		}
 	}
 
-	/* Don't assign PE to PCI bus, which doesn't have subordinate devices */
-	if (list_empty(&bus->devices))
-		return;
+	if (bridge && pci_pcie_type(bridge) == PCI_EXP_TYPE_PCI_BRIDGE)
+		all = true;
+
+	/* If the bus has no devices then how did we get here?  */
+	WARN_ON(list_empty(&bus->devices));
+
+	pe = __pnv_ioda_get_pe(phb, bus->number << 8);
+	if (pe)
+		return pe;
 
 	/* Reserve PEs according to used M64 resources */
 	pnv_ioda_reserve_m64_pe(bus, NULL, all);
-
-	/*
-	 * Assign PE. We might run here because of partial hotplug.
-	 * For the case, we just pick up the existing PE and should
-	 * not allocate resources again.
-	 */
 	pe = pnv_ioda_setup_bus_PE(bus, all);
-	if (!pe)
-		return;
+	if (WARN_ON(!pe))
+		return NULL;
 
 	pnv_ioda_setup_pe_seg(pe);
 	switch (phb->type) {
@@ -3320,6 +3291,8 @@ static void pnv_pci_setup_bridge(struct pci_bus *bus, unsigned long type)
 		pr_warn("%s: No DMA for PHB#%x (type %d)\n",
 			__func__, phb->hose->global_number, phb->type);
 	}
+
+	return pe;
 }
 
 static resource_size_t pnv_pci_default_alignment(void)
@@ -3607,7 +3580,7 @@ static const struct pci_controller_ops pnv_pci_ioda_controller_ops = {
 	.enable_device_hook	= pnv_pci_enable_device_hook,
 	.release_device		= pnv_pci_release_device,
 	.window_alignment	= pnv_pci_window_alignment,
-	.setup_bridge		= pnv_pci_setup_bridge,
+	.setup_bridge		= pnv_pci_fixup_bridge_resources,
 	.reset_secondary_bus	= pnv_pci_reset_secondary_bus,
 	.shutdown		= pnv_pci_ioda_shutdown,
 };
@@ -3628,6 +3601,26 @@ static const struct pci_controller_ops pnv_npu_ocapi_ioda_controller_ops = {
 	.reset_secondary_bus	= pnv_pci_reset_secondary_bus,
 	.shutdown		= pnv_pci_ioda_shutdown,
 };
+
+void pnv_pcibios_bus_add_device(struct pci_dev *pdev)
+{
+	struct pnv_ioda_pe *pe = pnv_ioda_get_pe(pdev);
+
+	if (!pe)
+		pe = pnv_pci_configure_bus(pdev->bus);
+
+	if (pe)
+		pe->device_count++;
+
+#ifdef CONFIG_EEH
+	if (eeh_has_flag(EEH_FORCE_DISABLED))
+		return;
+
+	dev_dbg(&pdev->dev, "EEH: Setting up device\n");
+	eeh_add_device_late(pdev);
+#endif
+}
+
 
 static void __init pnv_pci_init_ioda_phb(struct device_node *np,
 					 u64 hub_id, int ioda_type)
@@ -3869,6 +3862,7 @@ static void __init pnv_pci_init_ioda_phb(struct device_node *np,
 	ppc_md.pcibios_sriov_enable = pnv_pcibios_sriov_enable;
 	ppc_md.pcibios_sriov_disable = pnv_pcibios_sriov_disable;
 #endif
+	ppc_md.pcibios_bus_add_device = pnv_pcibios_bus_add_device;
 
 	pci_add_flags(PCI_REASSIGN_ALL_RSRC);
 
