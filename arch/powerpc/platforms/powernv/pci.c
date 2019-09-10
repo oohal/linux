@@ -821,7 +821,6 @@ void pnv_pci_dma_dev_setup(struct pci_dev *pdev)
 	/* Fix the VF pdn PE number */
 	if (pdev->is_virtfn) {
 		pdn = pci_get_pdn(pdev);
-		WARN_ON(pdn->pe_number != IODA_INVALID_PE);
 		list_for_each_entry(pe, &phb->ioda.pe_list, list) {
 			if (pe->rid == ((pdev->bus->number << 8) |
 			    (pdev->devfn & 0xff))) {
