@@ -22,11 +22,11 @@
 
 static struct pci_dev *get_pci_dev(struct device_node *dn)
 {
-	struct pci_dn *pdn = PCI_DN(dn);
-	struct pci_dev *pdev;
+	struct pci_dev *pdev = NULL;
 
-	pdev = pci_get_domain_bus_and_slot(pci_domain_nr(pdn->phb->bus),
-					   pdn->busno, pdn->devfn);
+	for_each_pci_dev(pdev)
+		if (pdev->dev.of_node == dn)
+			break;
 
 	/*
 	 * pci_get_domain_bus_and_slot() increased the reference count of
