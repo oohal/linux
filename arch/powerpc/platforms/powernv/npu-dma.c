@@ -29,15 +29,10 @@ static struct pci_dev *get_pci_dev(struct device_node *dn)
 			break;
 
 	/*
-	 * pci_get_domain_bus_and_slot() increased the reference count of
-	 * the PCI device, but callers don't need that actually as the PE
-	 * already holds a reference to the device. Since callers aren't
-	 * aware of the reference count change, call pci_dev_put() now to
-	 * avoid leaks.
+	 * NB: for_each_pci_dev() elevates the pci_dev refcount.
+	 * Caller is responsible for dropping the ref when it's
+	 * finished with it.
 	 */
-	if (pdev)
-		pci_dev_put(pdev);
-
 	return pdev;
 }
 
