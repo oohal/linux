@@ -1964,7 +1964,7 @@ static int eeh_debugfs_break_device(struct pci_dev *pdev)
 	pci_err(pdev, "Going to break: %pR\n", bar);
 
 	if (pdev->is_virtfn) {
-#ifndef CONFIG_IOV
+#ifndef CONFIG_PCI_IOV
 		return -ENXIO;
 #else
 		/*
