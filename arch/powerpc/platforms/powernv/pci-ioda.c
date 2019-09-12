@@ -1712,17 +1712,37 @@ int pnv_pcibios_sriov_enable(struct pci_dev *pdev, u16 num_vfs)
 }
 #endif /* CONFIG_PCI_IOV */
 
-static void pnv_pci_ioda_dma_dev_setup(struct pnv_phb *phb, struct pci_dev *pdev)
+void pnv_pci_ioda_dma_dev_setup(struct pci_dev *pdev)
 {
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct pci_dn *pdn = pci_get_pdn(pdev);
 	struct pnv_ioda_pe *pe;
+
+	if (!pdn)
+		return;
+
+#ifdef CONFIG_PCI_IOV
+	/* Fix the VF pdn PE number */
+	if (pdev->is_virtfn) {
+		WARN_ON(pdn->pe_number != IODA_INVALID_PE);
+
+		list_for_each_entry(pe, &phb->ioda.pe_list, list) {
+			if (pe->rid == ((pdev->bus->number << 8) |
+			    (pdev->devfn & 0xff))) {
+				pdn->pe_number = pe->pe_number;
+				pe->pdev = pdev;
+				break;
+			}
+		}
+	}
+#endif /* CONFIG_PCI_IOV */
 
 	/*
 	 * The function can be called while the PE#
 	 * hasn't been assigned. Do nothing for the
 	 * case.
 	 */
-	if (!pdn || pdn->pe_number == IODA_INVALID_PE)
+	if (pdn->pe_number == IODA_INVALID_PE)
 		return;
 
 	pe = &phb->ioda.pe_array[pdn->pe_number];
@@ -3587,7 +3607,7 @@ static void pnv_pci_ioda_shutdown(struct pci_controller *hose)
 }
 
 static const struct pci_controller_ops pnv_pci_ioda_controller_ops = {
-	.dma_dev_setup		= pnv_pci_dma_dev_setup,
+	.dma_dev_setup		= pnv_pci_ioda_dma_dev_setup,
 	.dma_bus_setup		= pnv_pci_dma_bus_setup,
 	.iommu_bypass_supported	= pnv_pci_ioda_iommu_bypass_supported,
 	.setup_msi_irqs		= pnv_setup_msi_irqs,
@@ -3601,7 +3621,6 @@ static const struct pci_controller_ops pnv_pci_ioda_controller_ops = {
 };
 
 static const struct pci_controller_ops pnv_npu_ioda_controller_ops = {
-	.dma_dev_setup		= pnv_pci_dma_dev_setup,
 	.setup_msi_irqs		= pnv_setup_msi_irqs,
 	.teardown_msi_irqs	= pnv_teardown_msi_irqs,
 	.enable_device_hook	= pnv_pci_enable_device_hook,
@@ -3847,7 +3866,6 @@ static void __init pnv_pci_init_ioda_phb(struct device_node *np,
 		hose->controller_ops = pnv_npu_ocapi_ioda_controller_ops;
 		break;
 	default:
-		phb->dma_dev_setup = pnv_pci_ioda_dma_dev_setup;
 		hose->controller_ops = pnv_pci_ioda_controller_ops;
 	}
 

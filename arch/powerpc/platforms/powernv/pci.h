@@ -106,7 +106,6 @@ struct pnv_phb {
 	int (*msi_setup)(struct pnv_phb *phb, struct pci_dev *dev,
 			 unsigned int hwirq, unsigned int virq,
 			 unsigned int is_64, struct msi_msg *msg);
-	void (*dma_dev_setup)(struct pnv_phb *phb, struct pci_dev *pdev);
 	int (*init_m64)(struct pnv_phb *phb);
 	int (*get_pe_state)(struct pnv_phb *phb, int pe_no);
 	void (*freeze_pe)(struct pnv_phb *phb, int pe_no);
@@ -186,8 +185,6 @@ extern void pnv_pci_init_npu2_opencapi_phb(struct device_node *np);
 extern void pnv_npu2_map_lpar(struct pnv_ioda_pe *gpe, unsigned long msr);
 extern void pnv_pci_reset_secondary_bus(struct pci_dev *dev);
 extern int pnv_eeh_phb_reset(struct pci_controller *hose, int option);
-
-extern void pnv_pci_dma_dev_setup(struct pci_dev *pdev);
 
 struct eeh_dev;
 struct eeh_dev *pnv_eeh_find_edev(struct pnv_phb *phb, u16 bdfn);

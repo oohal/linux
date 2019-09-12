@@ -822,31 +822,6 @@ struct iommu_table *pnv_pci_table_alloc(int nid)
 	return tbl;
 }
 
-void pnv_pci_dma_dev_setup(struct pci_dev *pdev)
-{
-	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
-#ifdef CONFIG_PCI_IOV
-	struct pnv_ioda_pe *pe;
-	struct pci_dn *pdn;
-
-	/* Fix the VF pdn PE number */
-	if (pdev->is_virtfn) {
-		pdn = pci_get_pdn(pdev);
-		list_for_each_entry(pe, &phb->ioda.pe_list, list) {
-			if (pe->rid == ((pdev->bus->number << 8) |
-			    (pdev->devfn & 0xff))) {
-				pdn->pe_number = pe->pe_number;
-				pe->pdev = pdev;
-				break;
-			}
-		}
-	}
-#endif /* CONFIG_PCI_IOV */
-
-	if (phb && phb->dma_dev_setup)
-		phb->dma_dev_setup(phb, pdev);
-}
-
 void pnv_pci_dma_bus_setup(struct pci_bus *bus)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
