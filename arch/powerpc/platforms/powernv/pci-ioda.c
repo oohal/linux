@@ -1066,16 +1066,13 @@ static int pnv_pci_vf_resource_shift(struct pci_dev *dev, int offset)
 static struct pnv_ioda_pe *pnv_ioda_setup_dev_PE(struct pci_dev *dev)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
-	struct pci_dn *pdn = pci_get_pdn(dev);
-	struct pnv_ioda_pe *pe;
+	struct pnv_ioda_pe *pe = pnv_ioda_get_pe(dev);
 
-	if (!pdn) {
-		pr_err("%s: Device tree node not associated properly\n",
-			   pci_name(dev));
+	/* Already has a PE assigned? huh? */
+	if (pe) {
+		WARN_ON(1);
 		return NULL;
 	}
-	if (pdn->pe_number != IODA_INVALID_PE)
-		return NULL;
 
 	pe = pnv_ioda_alloc_pe(phb);
 	if (!pe) {
@@ -1084,29 +1081,25 @@ static struct pnv_ioda_pe *pnv_ioda_setup_dev_PE(struct pci_dev *dev)
 		return NULL;
 	}
 
-	/* NOTE: We get only one ref to the pci_dev for the pdn, not for the
-	 * pointer in the PE data structure, both should be destroyed at the
-	 * same time. However, this needs to be looked at more closely again
-	 * once we actually start removing things (Hotplug, SR-IOV, ...)
+	/*
+	 * NB: We **do not** hold a pci_dev ref for pe->pdev.
 	 *
-	 * At some point we want to remove the PDN completely anyways
+	 * The pci_dev's release function cleans up the ioda_pe state, so:
+	 *  a) We can't take a ref otherwise the release function is never called
+	 *  b) The pe->pdev pointer will always point to valid pci_dev (or NULL)
 	 */
-	pci_dev_get(dev);
-	pdn->pe_number = pe->pe_number;
 	pe->flags = PNV_IODA_PE_DEV;
 	pe->pdev = dev;
 	pe->pbus = NULL;
 	pe->mve_number = -1;
-	pe->rid = dev->bus->number << 8 | pdn->devfn;
+	pe->rid = dev->bus->number << 8 | dev->devfn;
 
 	pe_info(pe, "Associated device to PE\n");
 
 	if (pnv_ioda_configure_pe(phb, pe)) {
 		/* XXX What do we do here ? */
 		pnv_ioda_free_pe(pe);
-		pdn->pe_number = IODA_INVALID_PE;
 		pe->pdev = NULL;
-		pci_dev_put(dev);
 		return NULL;
 	}
 
