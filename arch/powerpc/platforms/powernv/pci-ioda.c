@@ -3562,14 +3562,14 @@ static void pnv_ioda_release_pe(struct pnv_ioda_pe *pe)
 static void pnv_pci_release_device(struct pci_dev *pdev)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
+	struct pnv_ioda_pe *pe = pnv_ioda_get_pe(pdev);
 	struct pci_dn *pdn = pci_get_pdn(pdev);
-	struct pnv_ioda_pe *pe;
 
 	/* The VF PE state is torn down when sriov_disable() is called */
 	if (pdev->is_virtfn)
 		return;
 
-	if (!pdn || pdn->pe_number == IODA_INVALID_PE)
+	if (WARN_ON(!pe))
 		return;
 
 	/*
@@ -3588,7 +3588,6 @@ static void pnv_pci_release_device(struct pci_dev *pdev)
 	 * be increased on adding devices. It leads to unbalanced PE's device
 	 * count and eventually make normal PCI hotplug path broken.
 	 */
-	pe = &phb->ioda.pe_array[pdn->pe_number];
 	pdn->pe_number = IODA_INVALID_PE;
 
 	WARN_ON(--pe->device_count < 0);
