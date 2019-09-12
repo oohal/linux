@@ -1001,10 +1001,8 @@ static void pnv_eeh_wait_for_pending(struct eeh_dev *edev, const char *type,
 		msleep((1 << i) * 100);
 	}
 
-	pr_warn("%s: Pending transaction while issuing %sFLR to %04x:%02x:%02x.%01x\n",
-		__func__, type,
-		pdn->phb->global_number, pdn->busno,
-		PCI_SLOT(pdn->devfn), PCI_FUNC(pdn->devfn));
+	eeh_edev_warn(edev, "%s: Pending transaction while issuing %sFLR\n",
+		__func__, type);
 }
 
 static int pnv_eeh_do_flr(struct eeh_dev *edev, int option)
