@@ -3541,9 +3541,7 @@ static void pnv_ioda_release_pe(struct pnv_ioda_pe *pe)
 
 static void pnv_pci_release_device(struct pci_dev *pdev)
 {
-	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct pnv_ioda_pe *pe = pnv_ioda_get_pe(pdev);
-	struct pci_dn *pdn = pci_get_pdn(pdev);
 
 	/* The VF PE state is torn down when sriov_disable() is called */
 	if (pdev->is_virtfn)
@@ -3559,16 +3557,6 @@ static void pnv_pci_release_device(struct pci_dev *pdev)
 	 */
 	if (pdev->is_physfn)
 		kfree(pdev->dev.archdata.iov_data);
-
-	/*
-	 * PCI hotplug can happen as part of EEH error recovery. The @pdn
-	 * isn't removed and added afterwards in this scenario. We should
-	 * set the PE number in @pdn to an invalid one. Otherwise, the PE's
-	 * device count is decreased on removing devices while failing to
-	 * be increased on adding devices. It leads to unbalanced PE's device
-	 * count and eventually make normal PCI hotplug path broken.
-	 */
-	pdn->pe_number = IODA_INVALID_PE;
 
 	WARN_ON(--pe->device_count < 0);
 	if (pe->device_count == 0)
