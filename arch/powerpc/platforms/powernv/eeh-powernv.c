@@ -394,28 +394,44 @@ static struct eeh_dev *pnv_eeh_probe(struct pci_dev *pdev)
 	int ret;
 	int bdfn = (pdev->bus->number << 8) | (pdev->devfn);
 
-	/*
-	 * When probing the root bridge, which doesn't have any
-	 * subordinate PCI devices. We don't have OF node for
-	 * the root bridge. So it's not reasonable to continue
-	 * the probing.
-	 */
-	if (!edev || edev->pe)
-		return NULL;
+	pci_dbg(pdev, "%s: probing\n", __func__);
 
-	/* already configured? */
-	if (edev->pdev) {
-		pr_debug("%s: found existing edev for %04x:%02x:%02x.%01x\n",
-			__func__, hose->global_number, bdfn >> 8,
-			PCI_SLOT(bdfn), PCI_FUNC(bdfn));
-		return edev;
+	/*
+	 * EEH keeps the eeh_dev alive over a recovery pass even when the
+	 * corresponding pci_dev has been torn down. In that case we need
+	 * to find the existing eeh_dev and re-bind the two.
+	 */
+	edev = pnv_eeh_find_edev(phb, bdfn);
+	if (edev) {
+		eeh_edev_dbg(edev, "Found existing edev!\n");
+
+		/*
+		 * XXX: eeh_remove_device() clears pdev so we shouldn't hit this
+		 * normally. I've found that screwing around with the pci probe
+		 * path can result in eeh_probe_pdev() being called twice. This
+		 * is harmless at the moment, but it's pretty strange so emit a
+		 * warning to be on the safe side.
+		 */
+		if (WARN_ON(edev->pdev))
+			eeh_edev_dbg(edev, "%s: already bound to a pdev!\n", __func__);
+
+		edev->pdev = pdev;
+
+		/* should we be doing something with REMOVED too? */
+		edev->mode &= EEH_DEV_DISCONNECTED;
+
+		/* update the primary bus if we need to */
+		// XXX: why do we need to do this? is the pci_bus going away? what cleared the flag?
+		if (!(edev->pe->state & EEH_PE_PRI_BUS)) {
+			edev->pe->bus = pdev->bus;
+			if (edev->pe->bus)
+				edev->pe->state |= EEH_PE_PRI_BUS;
+		}
 	}
 
 	/* Skip for PCI-ISA bridge */
 	if ((pdev->class >> 8) == PCI_CLASS_BRIDGE_ISA)
 		return NULL;
-
-	eeh_edev_dbg(edev, "Probing device\n");
 
 	/* Initialize eeh device */
 	edev->mode	&= 0xFFFFFF00;
