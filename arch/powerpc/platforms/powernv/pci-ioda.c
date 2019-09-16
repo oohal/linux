@@ -680,13 +680,9 @@ struct pnv_ioda_pe *pnv_pci_bdfn_to_pe(struct pnv_phb *phb, u16 bdfn)
 struct pnv_ioda_pe *pnv_ioda_get_pe(struct pci_dev *dev)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
-	struct pci_dn *pdn = pci_get_pdn(dev);
+	u16 bdfn = (dev->bus->number << 8) | dev->devfn;
 
-	if (!pdn)
-		return NULL;
-	if (pdn->pe_number == IODA_INVALID_PE)
-		return NULL;
-	return &phb->ioda.pe_array[pdn->pe_number];
+	return pnv_pci_bdfn_to_pe(phb, bdfn);
 }
 
 static int pnv_ioda_set_one_peltv(struct pnv_phb *phb,
