@@ -312,7 +312,7 @@ static struct eeh_dev *pnv_eeh_probe(struct pci_dev *pdev)
 	struct eeh_pe *upstream_pe;
 	uint32_t pcie_flags;
 	int ret;
-	int config_addr = (pdn->busno << 8) | (pdn->devfn);
+	int bdfn = (pdev->bus->number << 8) | (pdev->devfn);
 
 	/*
 	 * When probing the root bridge, which doesn't have any
@@ -326,8 +326,8 @@ static struct eeh_dev *pnv_eeh_probe(struct pci_dev *pdev)
 	/* already configured? */
 	if (edev->pdev) {
 		pr_debug("%s: found existing edev for %04x:%02x:%02x.%01x\n",
-			__func__, hose->global_number, config_addr >> 8,
-			PCI_SLOT(config_addr), PCI_FUNC(config_addr));
+			__func__, hose->global_number, bdfn >> 8,
+			PCI_SLOT(bdfn), PCI_FUNC(bdfn));
 		return edev;
 	}
 
@@ -356,7 +356,7 @@ static struct eeh_dev *pnv_eeh_probe(struct pci_dev *pdev)
 		}
 	}
 
-	edev->pe_config_addr = phb->ioda.pe_rmap[config_addr];
+	edev->pe_config_addr = phb->ioda.pe_rmap[bdfn];
 
 	upstream_pe = pnv_eeh_get_upstream_pe(pdev);
 
@@ -385,14 +385,14 @@ static struct eeh_dev *pnv_eeh_probe(struct pci_dev *pdev)
 	 * Broadcom Shiner 4-ports 1G NICs (14e4:168a)
 	 * Broadcom Shiner 2-ports 10G NICs (14e4:168e)
 	 */
-	if ((pdn->vendor_id == PCI_VENDOR_ID_BROADCOM &&
-	     pdn->device_id == 0x1656) ||
-	    (pdn->vendor_id == PCI_VENDOR_ID_BROADCOM &&
-	     pdn->device_id == 0x1657) ||
-	    (pdn->vendor_id == PCI_VENDOR_ID_BROADCOM &&
-	     pdn->device_id == 0x168a) ||
-	    (pdn->vendor_id == PCI_VENDOR_ID_BROADCOM &&
-	     pdn->device_id == 0x168e))
+	if ((pdev->vendor == PCI_VENDOR_ID_BROADCOM &&
+	     pdev->device == 0x1656) ||
+	    (pdev->vendor == PCI_VENDOR_ID_BROADCOM &&
+	     pdev->device == 0x1657) ||
+	    (pdev->vendor == PCI_VENDOR_ID_BROADCOM &&
+	     pdev->device == 0x168a) ||
+	    (pdev->vendor == PCI_VENDOR_ID_BROADCOM &&
+	     pdev->device == 0x168e))
 		edev->pe->state |= EEH_PE_CFG_RESTRICTED;
 
 	/*
@@ -403,7 +403,7 @@ static struct eeh_dev *pnv_eeh_probe(struct pci_dev *pdev)
 	 */
 	if (!(edev->pe->state & EEH_PE_PRI_BUS)) {
 		edev->pe->bus = pci_find_bus(hose->global_number,
-					     pdn->busno);
+					     pdev->bus->number);
 		if (edev->pe->bus)
 			edev->pe->state |= EEH_PE_PRI_BUS;
 	}
