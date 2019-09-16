@@ -275,69 +275,6 @@ int pnv_eeh_post_init(void)
 	return ret;
 }
 
-static int pnv_eeh_find_cap(struct pci_dn *pdn, int cap)
-{
-	int pos = PCI_CAPABILITY_LIST;
-	int cnt = 48;   /* Maximal number of capabilities */
-	u32 status, id;
-
-	if (!pdn)
-		return 0;
-
-	/* Check if the device supports capabilities */
-	pnv_pci_cfg_read(pdn, PCI_STATUS, 2, &status);
-	if (!(status & PCI_STATUS_CAP_LIST))
-		return 0;
-
-	while (cnt--) {
-		pnv_pci_cfg_read(pdn, pos, 1, &pos);
-		if (pos < 0x40)
-			break;
-
-		pos &= ~3;
-		pnv_pci_cfg_read(pdn, pos + PCI_CAP_LIST_ID, 1, &id);
-		if (id == 0xff)
-			break;
-
-		/* Found */
-		if (id == cap)
-			return pos;
-
-		/* Next one */
-		pos += PCI_CAP_LIST_NEXT;
-	}
-
-	return 0;
-}
-
-static int pnv_eeh_find_ecap(struct pci_dn *pdn, int cap)
-{
-	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
-	u32 header;
-	int pos = 256, ttl = (4096 - 256) / 8;
-
-	if (!edev || !edev->pcie_cap)
-		return 0;
-	if (pnv_pci_cfg_read(pdn, pos, 4, &header) != PCIBIOS_SUCCESSFUL)
-		return 0;
-	else if (!header)
-		return 0;
-
-	while (ttl-- > 0) {
-		if (PCI_EXT_CAP_ID(header) == cap && pos)
-			return pos;
-
-		pos = PCI_EXT_CAP_NEXT(header);
-		if (pos < 256)
-			break;
-
-		if (pnv_pci_cfg_read(pdn, pos, 4, &header) != PCIBIOS_SUCCESSFUL)
-			break;
-	}
-
-	return 0;
-}
-
 static struct eeh_pe *pnv_eeh_get_upstream_pe(struct pci_dev *pdev)
 {
 	struct pci_controller *hose = pdev->bus->sysdata;
@@ -402,10 +339,10 @@ static struct eeh_dev *pnv_eeh_probe(struct pci_dev *pdev)
 
 	/* Initialize eeh device */
 	edev->mode	&= 0xFFFFFF00;
-	edev->pcix_cap = pnv_eeh_find_cap(pdn, PCI_CAP_ID_PCIX);
-	edev->pcie_cap = pnv_eeh_find_cap(pdn, PCI_CAP_ID_EXP);
-	edev->af_cap   = pnv_eeh_find_cap(pdn, PCI_CAP_ID_AF);
-	edev->aer_cap  = pnv_eeh_find_ecap(pdn, PCI_EXT_CAP_ID_ERR);
+	edev->pcix_cap = pci_find_capability(pdev, PCI_CAP_ID_PCIX);
+	edev->pcie_cap = pci_find_capability(pdev, PCI_CAP_ID_EXP);
+	edev->af_cap   = pci_find_capability(pdev, PCI_CAP_ID_AF);
+	edev->aer_cap  = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ERR);
 	if ((pdev->class >> 8) == PCI_CLASS_BRIDGE_PCI) {
 		edev->mode |= EEH_DEV_BRIDGE;
 		if (edev->pcie_cap) {
