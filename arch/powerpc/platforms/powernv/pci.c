@@ -712,30 +712,23 @@ int pnv_pci_cfg_write(struct pci_dn *pdn,
 }
 
 #if CONFIG_EEH
-static bool pnv_pci_cfg_check(struct pci_dn *pdn)
+bool pnv_eeh_pre_cfg_check(struct eeh_dev *edev)
 {
-	struct eeh_dev *edev = NULL;
-	struct pnv_phb *phb = pdn->phb->private_data;
-
-	/* EEH not enabled ? */
-	if (!(phb->flags & PNV_PHB_FLAG_EEH))
+	if (!edev || !edev->pe)
 		return true;
 
-	/* PE reset or device removed ? */
-	edev = pdn->edev;
-	if (edev) {
-		if (edev->pe &&
-		    (edev->pe->state & EEH_PE_CFG_BLOCKED))
-			return false;
+	/* PE in reset? */
+	if (edev->pe->state & EEH_PE_CFG_BLOCKED)
+		return false;
 
-		if (edev->mode & EEH_DEV_REMOVED)
-			return false;
-	}
+	/* Device removed? */
+	if (edev->mode & EEH_DEV_REMOVED)
+		return false;
 
 	return true;
 }
 #else
-static inline pnv_pci_cfg_check(struct pci_dn *pdn)
+static inline pnv_pci_cfg_check(struct eeh_dev *edev)
 {
 	return true;
 }
@@ -747,6 +740,7 @@ static int pnv_pci_read_config(struct pci_bus *bus,
 {
 	struct pci_dn *pdn;
 	struct pnv_phb *phb;
+	struct eeh_dev *edev;
 	int ret;
 
 	*val = 0xFFFFFFFF;
@@ -754,14 +748,15 @@ static int pnv_pci_read_config(struct pci_bus *bus,
 	if (!pdn)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	if (!pnv_pci_cfg_check(pdn))
+	edev = pdn_to_eeh_dev(pdn);
+	if (!pnv_eeh_pre_cfg_check(edev))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	ret = pnv_pci_cfg_read(pdn, where, size, val);
 	phb = pdn->phb->private_data;
-	if (phb->flags & PNV_PHB_FLAG_EEH && pdn->edev) {
+	if (phb->flags & PNV_PHB_FLAG_EEH && edev) {
 		if (*val == EEH_IO_ERROR_VALUE(size) &&
-		    eeh_dev_check_failure(pdn->edev))
+		    eeh_dev_check_failure(edev))
                         return PCIBIOS_DEVICE_NOT_FOUND;
 	} else {
 		pnv_pci_config_check_eeh(pdn);
@@ -776,13 +771,15 @@ static int pnv_pci_write_config(struct pci_bus *bus,
 {
 	struct pci_dn *pdn;
 	struct pnv_phb *phb;
+	struct eeh_dev *edev;
 	int ret;
 
 	pdn = pci_get_pdn_by_devfn(bus, devfn);
 	if (!pdn)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	if (!pnv_pci_cfg_check(pdn))
+	edev = pdn_to_eeh_dev(pdn);
+	if (!pnv_eeh_pre_cfg_check(edev))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	ret = pnv_pci_cfg_write(pdn, where, size, val);
