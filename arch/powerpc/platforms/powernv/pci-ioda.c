@@ -3382,7 +3382,6 @@ static resource_size_t pnv_pci_iov_resource_alignment(struct pci_dev *pdev,
 static bool pnv_pci_enable_device_hook(struct pci_dev *dev)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
-	struct pci_dn *pdn;
 
 	/* The function is probably called while the PEs have
 	 * not be created yet. For example, resource reassignment
@@ -3392,11 +3391,7 @@ static bool pnv_pci_enable_device_hook(struct pci_dev *dev)
 	if (!phb->initialized)
 		return true;
 
-	pdn = pci_get_pdn(dev);
-	if (!pdn || pdn->pe_number == IODA_INVALID_PE)
-		return false;
-
-	return true;
+	return !!pnv_ioda_get_pe(dev);
 }
 
 static long pnv_pci_ioda1_unset_window(struct iommu_table_group *table_group,
