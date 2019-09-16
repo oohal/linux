@@ -366,10 +366,9 @@ static int pnv_eeh_write_config(struct eeh_dev *edev,
  */
 static struct eeh_dev *pnv_eeh_probe_pdev(struct pci_dev *pdev)
 {
-	struct pci_dn *pdn = pci_get_pdn(pdev);
-	struct pci_controller *hose = pdn->phb;
-	struct pnv_phb *phb = hose->private_data;
-	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
+	struct pci_controller *hose = phb->hose;
+	struct eeh_dev *edev;
 	uint32_t pcie_flags;
 	int ret;
 	int config_addr = (pdev->bus->number << 8) | (pdev->devfn);
@@ -415,12 +414,27 @@ static struct eeh_dev *pnv_eeh_probe_pdev(struct pci_dev *pdev)
 	if ((pdev->class >> 8) == PCI_CLASS_BRIDGE_ISA)
 		return NULL;
 
+	/* otherwise allocate and initialise a new eeh_dev */
+	edev = kzalloc(sizeof(*edev), GFP_KERNEL);
+	if (!edev) {
+		pr_err("%s: out of memory lol\n", __func__);
+		return NULL;
+	}
+
 	/* Initialize eeh device */
+	edev->bdfn       = config_addr;
+	edev->controller = phb->hose;
+
 	edev->class_code = pdev->class;
 	edev->pcix_cap = pci_find_capability(pdev, PCI_CAP_ID_PCIX);
 	edev->pcie_cap = pci_find_capability(pdev, PCI_CAP_ID_EXP);
 	edev->af_cap   = pci_find_capability(pdev, PCI_CAP_ID_AF);
 	edev->aer_cap  = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ERR);
+
+	/* TODO: stash the vf_index in here? */
+	if (pdev->is_virtfn)
+		edev->physfn = pdev->physfn;
+
 	if ((pdev->class >> 8) == PCI_CLASS_BRIDGE_PCI) {
 		edev->mode |= EEH_DEV_BRIDGE;
 		if (edev->pcie_cap) {
