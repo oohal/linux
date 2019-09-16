@@ -372,7 +372,7 @@ static struct eeh_dev *pnv_eeh_probe_pdev(struct pci_dev *pdev)
 	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
 	uint32_t pcie_flags;
 	int ret;
-	int config_addr = (pdn->busno << 8) | (pdn->devfn);
+	int config_addr = (pdev->bus->number << 8) | (pdev->devfn);
 
 	/*
 	 * When probing the root bridge, which doesn't have any
@@ -392,18 +392,18 @@ static struct eeh_dev *pnv_eeh_probe_pdev(struct pci_dev *pdev)
 	}
 
 	/* Skip for PCI-ISA bridge */
-	if ((pdn->class_code >> 8) == PCI_CLASS_BRIDGE_ISA)
+	if ((pdev->class >> 8) == PCI_CLASS_BRIDGE_ISA)
 		return NULL;
 
 	eeh_edev_dbg(edev, "Probing device\n");
 
 	/* Initialize eeh device */
-	edev->class_code = pdn->class_code;
+	edev->class_code = pdev->class;
 	edev->pcix_cap = pci_find_capability(pdev, PCI_CAP_ID_PCIX);
 	edev->pcie_cap = pci_find_capability(pdev, PCI_CAP_ID_EXP);
 	edev->af_cap   = pci_find_capability(pdev, PCI_CAP_ID_AF);
 	edev->aer_cap  = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ERR);
-	if ((edev->class_code >> 8) == PCI_CLASS_BRIDGE_PCI) {
+	if ((pdev->class >> 8) == PCI_CLASS_BRIDGE_PCI) {
 		edev->mode |= EEH_DEV_BRIDGE;
 		if (edev->pcie_cap) {
 			pnv_eeh_read_config(edev, edev->pcie_cap + PCI_EXP_FLAGS,
@@ -443,14 +443,14 @@ static struct eeh_dev *pnv_eeh_probe_pdev(struct pci_dev *pdev)
 	 * Broadcom Shiner 4-ports 1G NICs (14e4:168a)
 	 * Broadcom Shiner 2-ports 10G NICs (14e4:168e)
 	 */
-	if ((pdn->vendor_id == PCI_VENDOR_ID_BROADCOM &&
-	     pdn->device_id == 0x1656) ||
-	    (pdn->vendor_id == PCI_VENDOR_ID_BROADCOM &&
-	     pdn->device_id == 0x1657) ||
-	    (pdn->vendor_id == PCI_VENDOR_ID_BROADCOM &&
-	     pdn->device_id == 0x168a) ||
-	    (pdn->vendor_id == PCI_VENDOR_ID_BROADCOM &&
-	     pdn->device_id == 0x168e))
+	if ((pdev->vendor == PCI_VENDOR_ID_BROADCOM &&
+	     pdev->device == 0x1656) ||
+	    (pdev->vendor == PCI_VENDOR_ID_BROADCOM &&
+	     pdev->device == 0x1657) ||
+	    (pdev->vendor == PCI_VENDOR_ID_BROADCOM &&
+	     pdev->device == 0x168a) ||
+	    (pdev->vendor == PCI_VENDOR_ID_BROADCOM &&
+	     pdev->device == 0x168e))
 		edev->pe->state |= EEH_PE_CFG_RESTRICTED;
 
 	/*
@@ -461,7 +461,7 @@ static struct eeh_dev *pnv_eeh_probe_pdev(struct pci_dev *pdev)
 	 */
 	if (!(edev->pe->state & EEH_PE_PRI_BUS)) {
 		edev->pe->bus = pci_find_bus(hose->global_number,
-					     pdn->busno);
+					     pdev->bus->number);
 		if (edev->pe->bus)
 			edev->pe->state |= EEH_PE_PRI_BUS;
 	}
