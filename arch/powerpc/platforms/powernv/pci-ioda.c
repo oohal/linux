@@ -1711,45 +1711,18 @@ m64_failed:
 int pnv_pcibios_sriov_disable(struct pci_dev *pdev)
 {
 	pnv_pci_sriov_disable(pdev);
-
-	/* Release PCI data */
-	remove_sriov_vf_pdns(pdev);
 	return 0;
 }
 
 int pnv_pcibios_sriov_enable(struct pci_dev *pdev, u16 num_vfs)
 {
-	/* Allocate PCI data */
-	add_sriov_vf_pdns(pdev);
-
 	return pnv_pci_sriov_enable(pdev, num_vfs);
 }
 #endif /* CONFIG_PCI_IOV */
 
 void pnv_pci_ioda_dma_dev_setup(struct pci_dev *pdev)
 {
-	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
-	struct pci_dn *pdn = pci_get_pdn(pdev);
 	struct pnv_ioda_pe *pe;
-
-	if (!pdn)
-		return;
-
-#ifdef CONFIG_PCI_IOV
-	/* Fix the VF pdn PE number */
-	if (pdev->is_virtfn) {
-		WARN_ON(pdn->pe_number != IODA_INVALID_PE);
-
-		list_for_each_entry(pe, &phb->ioda.pe_list, list) {
-			if (pe->rid == ((pdev->bus->number << 8) |
-			    (pdev->devfn & 0xff))) {
-				pdn->pe_number = pe->pe_number;
-				pe->pdev = pdev;
-				break;
-			}
-		}
-	}
-#endif /* CONFIG_PCI_IOV */
 
 	/*
 	 * The function can be called while the PE#
