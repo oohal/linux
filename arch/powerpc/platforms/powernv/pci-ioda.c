@@ -1526,7 +1526,6 @@ static void pnv_ioda_setup_vf_PE(struct pci_dev *pdev, u16 num_vfs)
 	for (vf_index = 0; vf_index < num_vfs; vf_index++) {
 		int vf_devfn = pci_iov_virtfn_devfn(pdev, vf_index);
 		int vf_bus = pci_iov_virtfn_bus(pdev, vf_index);
-		struct pci_dn *vf_pdn;
 
 		if (iov->m64_single_mode)
 			pe_num = iov->pe_num_map[vf_index];
@@ -1557,15 +1556,6 @@ static void pnv_ioda_setup_vf_PE(struct pci_dev *pdev, u16 num_vfs)
 		mutex_lock(&phb->ioda.pe_list_mutex);
 		list_add_tail(&pe->list, &phb->ioda.pe_list);
 		mutex_unlock(&phb->ioda.pe_list_mutex);
-
-		/* associate this pe to it's pdn */
-		list_for_each_entry(vf_pdn, &pdn->parent->child_list, list) {
-			if (vf_pdn->busno == vf_bus &&
-			    vf_pdn->devfn == vf_devfn) {
-				vf_pdn->pe_number = pe_num;
-				break;
-			}
-		}
 
 		pnv_pci_ioda2_setup_dma_pe(phb, pe);
 #ifdef CONFIG_IOMMU_API
@@ -1688,17 +1678,11 @@ m64_failed:
 int pnv_pcibios_sriov_disable(struct pci_dev *pdev)
 {
 	pnv_pci_sriov_disable(pdev);
-
-	/* Release PCI data */
-	remove_sriov_vf_pdns(pdev);
 	return 0;
 }
 
 int pnv_pcibios_sriov_enable(struct pci_dev *pdev, u16 num_vfs)
 {
-	/* Allocate PCI data */
-	add_sriov_vf_pdns(pdev);
-
 	return pnv_pci_sriov_enable(pdev, num_vfs);
 }
 #endif /* CONFIG_PCI_IOV */
