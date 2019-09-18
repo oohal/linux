@@ -119,17 +119,10 @@ void pci_hp_add_devices(struct pci_bus *bus)
 	if (mode == PCI_PROBE_DEVTREE) {
 		/* use ofdt-based probe */
 		of_rescan_bus(dn, bus);
-	} else if (mode == PCI_PROBE_NORMAL &&
-		   dn->child && PCI_DN(dn->child)) {
-		/*
-		 * Use legacy probe. In the partial hotplug case, we
-		 * probably have grandchildren devices unplugged. So
-		 * we don't check the return value from pci_scan_slot() in
-		 * order for fully rescan all the way down to pick them up.
-		 * They can have been removed during partial hotplug.
-		 */
-		slotno = PCI_SLOT(PCI_DN(dn->child)->devfn);
-		pci_scan_slot(bus, PCI_DEVFN(slotno, 0));
+	} else if (mode == PCI_PROBE_NORMAL) {
+		for (slotno = 0; slotno < 255; slotno += 8)
+			pci_scan_slot(bus, slotno);
+
 		max = bus->busn_res.start;
 		/*
 		 * Scan bridges that are already configured. We don't touch
