@@ -70,11 +70,12 @@ void pseries_pcibios_bus_add_device(struct pci_dev *pdev)
 	eeh_add_device_early(pdn);
 #ifdef CONFIG_PCI_IOV
 	if (pdev->is_virtfn) {
+		struct eeh_pe *physfn_pe = pci_dev_to_eeh_dev(pdev->physfn)->pe;
 		struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
 
 		edev->pe_config_addr =  (pdn->busno << 16) | (pdn->devfn << 8);
 		eeh_rmv_from_parent_pe(edev); /* Remove as it is adding to bus pe */
-		eeh_add_to_parent_pe(edev);   /* Add as VF PE type */
+		eeh_add_to_parent_pe(physfn_pe, edev); /* Add as VF PE type */
 	}
 #endif
 	eeh_add_device_late(pdev);
@@ -221,6 +222,43 @@ static int pseries_eeh_find_ecap(struct pci_dn *pdn, int cap)
 }
 
 /**
+ * pseries_eeh_pe_get_parent - Retrieve the parent PE
+ * @edev: EEH device
+ *
+ * The whole PEs existing in the system are organized as hierarchy
+ * tree. The function is used to retrieve the parent PE according
+ * to the parent EEH device.
+ */
+static struct eeh_pe *pseries_eeh_pe_get_parent(struct eeh_dev *edev)
+{
+	struct eeh_dev *parent;
+	struct pci_dn *pdn = eeh_dev_to_pdn(edev);
+
+	/*
+	 * It might have the case for the indirect parent
+	 * EEH device already having associated PE, but
+	 * the direct parent EEH device doesn't have yet.
+	 */
+	if (edev->physfn)
+		pdn = pci_get_pdn(edev->physfn);
+	else
+		pdn = pdn ? pdn->parent : NULL;
+	while (pdn) {
+		/* We're poking out of PCI territory */
+		parent = pdn_to_eeh_dev(pdn);
+		if (!parent)
+			return NULL;
+
+		if (parent->pe)
+			return parent->pe;
+
+		pdn = pdn->parent;
+	}
+
+	return NULL;
+}
+
+/**
  * pseries_eeh_probe - EEH probe on the given device
  * @pdn: PCI device node
  * @data: Unused
@@ -286,9 +324,13 @@ static void pseries_eeh_probe_pdn(struct pci_dn *pdn)
 	if (ret) {
 		eeh_edev_dbg(edev, "EEH failed to enable on device (code %d)\n", ret);
 	} else {
+		struct eeh_pe *parent;
+
 		/* Retrieve PE address */
 		edev->pe_config_addr = eeh_ops->get_pe_addr(&pe);
 		pe.addr = edev->pe_config_addr;
+
+		parent = pseries_eeh_pe_get_parent(edev);
 
 		/* Some older systems (Power4) allow the ibm,set-eeh-option
 		 * call to succeed even on nodes where EEH is not supported.
@@ -298,16 +340,15 @@ static void pseries_eeh_probe_pdn(struct pci_dn *pdn)
 		if (ret > 0 && ret != EEH_STATE_NOT_SUPPORT)
 			enable = 1;
 
-		if (enable) {
+		/* This device doesn't support EEH, but it may have an
+		 * EEH parent, in which case we mark it as supported.
+		 */
+		if (parent && !enable)
+			edev->pe_config_addr = parent->addr;
+
+		if (enable || parent) {
 			eeh_add_flag(EEH_ENABLED);
-			eeh_add_to_parent_pe(edev);
-		} else if (pdn->parent && pdn_to_eeh_dev(pdn->parent) &&
-			   (pdn_to_eeh_dev(pdn->parent))->pe) {
-			/* This device doesn't support EEH, but it may have an
-			 * EEH parent, in which case we mark it as supported.
-			 */
-			edev->pe_config_addr = pdn_to_eeh_dev(pdn->parent)->pe_config_addr;
-			eeh_add_to_parent_pe(edev);
+			eeh_add_to_parent_pe(parent, edev);
 		}
 		eeh_edev_dbg(edev, "EEH is %s on device (code %d)\n",
 			     (enable ? "enabled" : "unsupported"), ret);
