@@ -358,6 +358,25 @@ static int pnv_eeh_write_config(struct eeh_dev *edev,
 	return pnv_pci_cfg_write(pdn, where, size, val);
 }
 
+static struct eeh_pe *pnv_eeh_pe_get_parent(struct pci_dev *pdev)
+{
+	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
+	struct pci_dev *parent = pdev->bus->self;
+
+#ifdef CONFIG_PCI_IOV
+	if (pdev->is_virtfn)
+		parent = pdev->physfn;
+#endif
+
+	if (parent) {
+		struct pnv_ioda_pe *ioda_pe = pnv_ioda_get_pe(parent);
+
+		return eeh_pe_get(phb->hose, ioda_pe->pe_number, 0);
+	}
+
+	return NULL;
+}
+
 /**
  * pnv_eeh_probe - Do probe on PCI device
  * @pdev: pci_dev to probe
@@ -368,6 +387,7 @@ static struct eeh_dev *pnv_eeh_probe_pdev(struct pci_dev *pdev)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct pci_controller *hose = phb->hose;
+	struct eeh_pe *parent_pe;
 	struct eeh_dev *edev;
 	uint32_t pcie_flags;
 	int ret;
@@ -450,8 +470,11 @@ static struct eeh_dev *pnv_eeh_probe_pdev(struct pci_dev *pdev)
 
 	edev->pe_config_addr = phb->ioda.pe_rmap[config_addr];
 
+	/* find the PE that contains this PE, might be NULL */
+	parent_pe = pnv_eeh_pe_get_parent(pdev);
+
 	/* Create PE */
-	ret = eeh_add_to_parent_pe(edev);
+	ret = eeh_add_to_parent_pe(parent_pe, edev);
 	if (ret) {
 		eeh_edev_warn(edev, "Failed to add device to PE (code %d)\n", ret);
 		return NULL;

@@ -319,55 +319,22 @@ struct eeh_pe *eeh_pe_get(struct pci_controller *phb,
 }
 
 /**
- * eeh_pe_get_parent - Retrieve the parent PE
- * @edev: EEH device
- *
- * The whole PEs existing in the system are organized as hierarchy
- * tree. The function is used to retrieve the parent PE according
- * to the parent EEH device.
- */
-static struct eeh_pe *eeh_pe_get_parent(struct eeh_dev *edev)
-{
-	struct eeh_dev *parent;
-	struct pci_dn *pdn = eeh_dev_to_pdn(edev);
-
-	/*
-	 * It might have the case for the indirect parent
-	 * EEH device already having associated PE, but
-	 * the direct parent EEH device doesn't have yet.
-	 */
-	if (edev->physfn)
-		pdn = pci_get_pdn(edev->physfn);
-	else
-		pdn = pdn ? pdn->parent : NULL;
-	while (pdn) {
-		/* We're poking out of PCI territory */
-		parent = pdn_to_eeh_dev(pdn);
-		if (!parent)
-			return NULL;
-
-		if (parent->pe)
-			return parent->pe;
-
-		pdn = pdn->parent;
-	}
-
-	return NULL;
-}
-
-/**
  * eeh_add_to_parent_pe - Add EEH device to parent PE
+ * @parent: PE to create additional PEs under
  * @edev: EEH device
  *
- * Add EEH device to the parent PE. If the parent PE already
- * exists, the PE type will be changed to EEH_PE_BUS. Otherwise,
- * we have to create new PE to hold the EEH device and the new
- * PE will be linked to its parent PE as well.
+ * Add EEH device to the PE in edev->pe_config_addr. If the PE
+ * already exists then we'll add it to that. Otherwise a new
+ * PE is created, and inserted into the PE tree below @parent.
+ * If @parent is NULL, then it will be inserted under the PHB
+ * PE for edev->controller.
+ *
+ * In either case @edev is added to the PE's device list.
  */
-int eeh_add_to_parent_pe(struct eeh_dev *edev)
+int eeh_add_to_parent_pe(struct eeh_pe *parent, struct eeh_dev *edev)
 {
 	int config_addr = edev->bdfn;
-	struct eeh_pe *pe, *parent;
+	struct eeh_pe *pe;
 
 	/* Check if the PE number is valid */
 	if (!eeh_has_flag(EEH_VALID_PE_ZERO) && !edev->pe_config_addr) {
@@ -431,7 +398,6 @@ int eeh_add_to_parent_pe(struct eeh_dev *edev)
 	 * to PHB directly. Otherwise, we have to associate the
 	 * PE with its parent.
 	 */
-	parent = eeh_pe_get_parent(edev);
 	if (!parent) {
 		parent = eeh_phb_pe_get(edev->controller);
 		if (!parent) {
