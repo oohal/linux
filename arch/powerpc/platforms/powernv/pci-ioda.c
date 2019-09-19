@@ -2845,6 +2845,11 @@ static void pnv_pci_ioda_fixup_iov_resources(struct pci_dev *pdev)
 		res = &pdev->resource[i + PCI_IOV_RESOURCES];
 		if (!res->flags || res->parent)
 			continue;
+
+		// why use the _flags version? this is broken if the BAR lands
+		// in the 32bit prefetchable space. There's something going on
+		// here though since apparently 5958d19a143 fixed just that and
+		// broke it?
 		if (!pnv_pci_is_m64_flags(res->flags)) {
 			dev_warn(&pdev->dev, "Don't support SR-IOV with"
 					" non M64 VF BAR%d: %pR. \n",

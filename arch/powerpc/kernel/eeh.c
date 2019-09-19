@@ -1055,7 +1055,7 @@ void eeh_add_device_early(struct pci_dn *pdn)
 	struct pci_controller *phb = pdn ? pdn->phb : NULL;
 	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
 
-	if (!edev)
+	if (!edev) // not convinced this is possible
 		return;
 
 	if (!eeh_has_flag(EEH_PROBE_MODE_DEVTREE))
@@ -1124,6 +1124,10 @@ void eeh_add_device_late(struct pci_dev *dev)
 	 * unbalanced kref to the device during unplug time, which
 	 * relies on pcibios_release_device(). So we have to remove
 	 * that here explicitly.
+	 *
+	 * XXX: This working requires a PDN. Suppose we could check
+	 * if the device is still in the addr cache. Maybe we can
+	 * prune the cache sooner rather than relying on this hack.
 	 *
 	 * FIXME: This really shouldn't be necessary. We probably need
 	 * a pcibios hook in pci_destroy_dev
