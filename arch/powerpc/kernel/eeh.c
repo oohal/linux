@@ -1105,6 +1105,16 @@ void eeh_probe_device(struct pci_dev *dev)
 	 * remove the old EEH state.
 	 *
 	 * FIXME: HEY MA, LOOK AT ME, NO LOCKING!
+	 *
+	 * FIXME: This really shouldn't be necessary. We should probably
+	 * tear down the EEH state when we detatch the pci_dev from the
+	 * bus. We might need to move the bus notifiers out of the platforms
+	 * first.
+	 *
+	 * XXX: This working requires a PDN. Suppose we could check
+	 * if the device is still in the addr cache. Maybe we can
+	 * prune the cache sooner rather than relying on this hack.
+	 *
 	 */
 	if (edev->pdev && edev->pdev != dev) {
 		eeh_pe_tree_remove(edev);

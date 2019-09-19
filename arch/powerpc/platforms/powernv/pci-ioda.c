@@ -2739,7 +2739,14 @@ static void pnv_pci_ioda_fixup_iov_resources(struct pci_dev *pdev)
 		res = &pdev->resource[i + PCI_IOV_RESOURCES];
 		if (!res->flags || res->parent)
 			continue;
+
+		// why use the _flags version? this is broken if the BAR lands
+		// in the 32bit prefetchable space. There's something going on
+		// here though since apparently 5958d19a143 fixed just that and
+		// broke it?
 		if (!pnv_pci_is_m64_flags(res->flags)) {
+			// if the device has 32bit sriov BARs then we don't
+			// support enabling VFs for this device.
 			dev_warn(&pdev->dev, "Don't support SR-IOV with"
 					" non M64 VF BAR%d: %pR. \n",
 				 i, res);
@@ -2749,18 +2756,14 @@ static void pnv_pci_ioda_fixup_iov_resources(struct pci_dev *pdev)
 		total_vf_bar_sz += pci_iov_resource_size(pdev,
 				i + PCI_IOV_RESOURCES);
 
-		/*
-		 * If bigger than quarter of M64 segment size, just round up
-		 * power of two.
-		 *
-		 * Generally, one M64 BAR maps one IOV BAR. To avoid conflict
-		 * with other devices, IOV BAR size is expanded to be
-		 * (total_pe * VF_BAR_size).  When VF_BAR_size is half of M64
-		 * segment size , the expanded size would equal to half of the
-		 * whole M64 space size, which will exhaust the M64 Space and
-		 * limit the system flexibility.  This is a design decision to
-		 * set the boundary to quarter of the M64 segment size.
-		 */
+
+		// if total_vf_bar_area > phb->ioda.m64_segsize / 2
+		//
+		// if the BAR space for the IOV resources is greater than 
+		// 1/4 of the total m64 space, then we use single-pe BARs
+		//
+		// ...why?
+		//
 		if (total_vf_bar_sz > gate) {
 			mul = roundup_pow_of_two(total_vfs);
 			dev_info(&pdev->dev,
@@ -3487,6 +3490,7 @@ static void pnv_pci_ioda_dma_bus_setup(struct pci_bus *bus)
 	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
 	struct pnv_ioda_pe *pe;
 
+	/* XXX: when does this get called again? I think it was post-EEH? */
 	list_for_each_entry(pe, &phb->ioda.pe_list, list) {
 		if (!(pe->flags & (PNV_IODA_PE_BUS | PNV_IODA_PE_BUS_ALL)))
 			continue;
