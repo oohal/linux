@@ -698,7 +698,7 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
 	if (rc)
 		return rc;
 
-	pci_lock_rescan_remove();
+	pci_lock_rescan_remove(); // why are we taking this here?
 
 	/* Restore PE */
 	eeh_ops->configure_bridge(pe);
@@ -1047,6 +1047,13 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 	/* If any device called out for a reset, then reset the slot */
 	if (result == PCI_ERS_RESULT_NEED_RESET) {
 		pr_info("EEH: Reset without hotplug activity\n");
+
+		// if the driver is eeh_aware rmv_data is populated with the eeh_devs that were removed
+		//
+		// if (any_passed || driver_eeh_aware || (pe->type & EEH_PE_VF)) {
+		// 	eeh_pe_dev_traverse(pe, eeh_rmv_device, rmv_data);
+		//
+		// only seems to happen if the removed device was a VF?
 		rc = eeh_reset_device(pe, bus, &rmv_data, true);
 		if (rc) {
 			pr_warn("%s: Cannot reset, err=%d\n",

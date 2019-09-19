@@ -1055,7 +1055,7 @@ void eeh_add_device_early(struct pci_dn *pdn)
 	struct pci_controller *phb = pdn ? pdn->phb : NULL;
 	struct eeh_dev *edev = pdn_to_eeh_dev(pdn);
 
-	if (!edev)
+	if (!edev) // not convinced this is possible
 		return;
 
 	if (!eeh_has_flag(EEH_PROBE_MODE_DEVTREE))
@@ -1130,6 +1130,11 @@ void eeh_add_device_late(struct pci_dev *dev)
 	 * tear down the EEH state when we detatch the pci_dev from the
 	 * bus. We might need to move the bus notifiers out of the platforms
 	 * first.
+	 *
+	 * XXX: This working requires a PDN. Suppose we could check
+	 * if the device is still in the addr cache. Maybe we can
+	 * prune the cache sooner rather than relying on this hack.
+	 *
 	 */
 	if (edev->pdev && edev->pdev != dev) {
 		eeh_rmv_from_parent_pe(edev);

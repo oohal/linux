@@ -123,7 +123,7 @@ void pci_hp_add_devices(struct pci_bus *bus)
 	if (mode == PCI_PROBE_DEVTREE) {
 		/* use ofdt-based probe */
 		of_rescan_bus(dn, bus);
-	} else if (mode == PCI_PROBE_NORMAL) {
+	} else if (mode == PCI_PROBE_NORMAL) { // NB: We can hit this for non-lpar pseries platforms
 		for (slotno = 0; slotno < 255; slotno += 8)
 			pci_scan_slot(bus, slotno);
 

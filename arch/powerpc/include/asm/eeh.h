@@ -131,8 +131,10 @@ static inline bool eeh_pe_passed(struct eeh_pe *pe)
 #define EEH_DEV_SYSFS		(1 << 9)	/* Sysfs created	*/
 #define EEH_DEV_REMOVED		(1 << 10)	/* Removed permanently	*/
 
+/* I think this could be squashed entirely and made to use the pci_dev?
+ * replace the pointer in dev.arch_data with a  */
 struct eeh_dev {
-	int mode;			/* EEH mode			*/
+	int mode;			/* EEH dev flags		*/
 	int class_code;			/* Class code of the device	*/
 	int bdfn;			/* bdfn of device (for cfg ops) */
 	struct pci_controller *controller;
@@ -143,11 +145,23 @@ struct eeh_dev {
 	int aer_cap;			/* Saved AER capability		*/
 	int af_cap;			/* Saved AF capability		*/
 	struct eeh_pe *pe;		/* Associated PE		*/
+
+	// replace the edev pointer in archdata with a list_head for this?
 	struct list_head entry;		/* Membership in eeh_pe.edevs	*/
+
+	/*
+	 * the fuck is this for? seems to be to track VFs when we remove a
+	 * device. I guess that's for when we get an EEH on the PF, but
+	 * the VFs are passed?
+	 */
 	struct list_head rmv_entry;	/* Membership in rmv_list	*/
 	struct pci_dn *pdn;		/* Associated PCI device node	*/
 	struct pci_dev *pdev;		/* Associated PCI device	*/
+
+	/* why isn't this a flag in mode? */
 	bool in_error;			/* Error flag for edev		*/
+
+	/* these are only set for VFs */
 	struct pci_dev *physfn;		/* Associated SRIOV PF		*/
 };
 

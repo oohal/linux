@@ -1806,6 +1806,11 @@ static bool pnv_pci_ioda_iommu_bypass_supported(struct pci_dev *pdev,
 	return false;
 }
 
+/*
+ * XXX: This seems to be used to reset the iommu table after vfio release a
+ * device. We should probably rename it to something better since this is easy
+ * to mixup with hose->ops::dma_bus_setup()
+ */
 static void pnv_ioda_setup_bus_dma(struct pnv_ioda_pe *pe, struct pci_bus *bus)
 {
 	struct pci_dev *dev;
@@ -2839,6 +2844,11 @@ static void pnv_pci_ioda_fixup_iov_resources(struct pci_dev *pdev)
 		res = &pdev->resource[i + PCI_IOV_RESOURCES];
 		if (!res->flags || res->parent)
 			continue;
+
+		// why use the _flags version? this is broken if the BAR lands
+		// in the 32bit prefetchable space. There's something going on
+		// here though since apparently 5958d19a143 fixed just that and
+		// broke it?
 		if (!pnv_pci_is_m64_flags(res->flags)) {
 			dev_warn(&pdev->dev, "Don't support SR-IOV with"
 					" non M64 VF BAR%d: %pR. \n",
@@ -3616,6 +3626,7 @@ void pnv_pci_dma_bus_setup(struct pci_bus *bus)
 	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
 	struct pnv_ioda_pe *pe;
 
+	/* XXX: when does this get called again? I think it was post-EEH? */
 	list_for_each_entry(pe, &phb->ioda.pe_list, list) {
 		if (!(pe->flags & (PNV_IODA_PE_BUS | PNV_IODA_PE_BUS_ALL)))
 			continue;
