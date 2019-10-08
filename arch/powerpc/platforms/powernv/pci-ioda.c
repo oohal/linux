@@ -3656,8 +3656,7 @@ void pnv_pci_dma_dev_setup(struct pci_dev *pdev)
 	}
 #endif /* CONFIG_PCI_IOV */
 
-	if (phb && phb->dma_dev_setup)
-		phb->dma_dev_setup(phb, pdev);
+	pnv_pci_ioda_dma_dev_setup(phb, pdev);
 }
 
 void pnv_pci_dma_bus_setup(struct pci_bus *bus)
@@ -3940,7 +3939,6 @@ static void __init pnv_pci_init_ioda_phb(struct device_node *np,
 		hose->controller_ops = pnv_npu_ocapi_ioda_controller_ops;
 		break;
 	default:
-		phb->dma_dev_setup = pnv_pci_ioda_dma_dev_setup;
 		hose->controller_ops = pnv_pci_ioda_controller_ops;
 	}
 
