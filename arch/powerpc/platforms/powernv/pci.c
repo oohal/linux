@@ -810,49 +810,6 @@ struct iommu_table *pnv_pci_table_alloc(int nid)
 	return tbl;
 }
 
-void pnv_pci_dma_dev_setup(struct pci_dev *pdev)
-{
-	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
-	struct pnv_phb *phb = hose->private_data;
-#ifdef CONFIG_PCI_IOV
-	struct pnv_ioda_pe *pe;
-
-	/* Fix the VF pdn PE number */
-	if (pdev->is_virtfn) {
-		list_for_each_entry(pe, &phb->ioda.pe_list, list) {
-			if (pe->rid == ((pdev->bus->number << 8) |
-			    (pdev->devfn & 0xff))) {
-				pe->pdev = pdev;
-				break;
-			}
-		}
-	}
-#endif /* CONFIG_PCI_IOV */
-
-	if (phb && phb->dma_dev_setup)
-		phb->dma_dev_setup(phb, pdev);
-}
-
-void pnv_pci_dma_bus_setup(struct pci_bus *bus)
-{
-	struct pci_controller *hose = bus->sysdata;
-	struct pnv_phb *phb = hose->private_data;
-	struct pnv_ioda_pe *pe;
-
-	list_for_each_entry(pe, &phb->ioda.pe_list, list) {
-		if (!(pe->flags & (PNV_IODA_PE_BUS | PNV_IODA_PE_BUS_ALL)))
-			continue;
-
-		if (!pe->pbus)
-			continue;
-
-		if (bus->number == ((pe->rid >> 8) & 0xFF)) {
-			pe->pbus = bus;
-			break;
-		}
-	}
-}
-
 struct device_node *pnv_pci_get_phb_node(struct pci_dev *dev)
 {
 	struct pci_controller *hose = pci_bus_to_host(dev->bus);
