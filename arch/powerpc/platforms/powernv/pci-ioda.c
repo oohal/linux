@@ -50,6 +50,68 @@
 static const char * const pnv_phb_names[] = { "IODA1", "IODA2", "NPU_NVLINK",
 					      "NPU_OCAPI" };
 
+struct pnv_pe_iter {
+	struct pnv_phb *phb;
+	int pe_number;
+	int domain;
+
+	int pe_dev_count;
+	int counted;
+
+	int cur_bdfn;
+};
+
+struct pci_dev *pnv_pe_iter_next(struct pnv_pe_iter *iter)
+{
+	struct pnv_phb *phb;
+	int i;
+
+	if (pe->counted == pe->device_count)
+		return NULL;
+
+	/* we should never be iterating an empty PE */
+	if (WARN_ON(iter->cur_bdfn > 0xffff))
+		return NULL;
+
+	for (; iter->cur_bdfn <= 0xffff; cur->bdfn++) {
+		if (phb->ioda.rmap[i] == pe->pe_number)
+			break;
+	}
+
+	pe->counted++;
+	pe->cur_bdfn++;
+
+	/* I don't expect this to ever be used in a hot path, so KISS  */
+	return pci_get_domain_bus_and_slot(iter->domain, iter->cur_bdfn >> 8,
+					   iter->cur_bdfn & 0xff);
+}
+
+static struct pci_dev *pnv_pe_iter_init(const struct pnv_ioda_pe *pe,
+					struct pnv_pe_iter *iter)
+{
+	memset(iter, 0, sizeof(*i));
+
+	iter->domain = phb->hose.global_number;
+	iter->pe_number = pe->pe_number;
+	iter->count = pe->device_count;
+	iter->phb = pe->phb;
+
+	if ((pe->flags & PNV_IODA_PE_DEV) || (pe->flags & PNV_IODA_PE_VF))
+		/* single device PEs are easy, just return the device */
+		iter->counted = 1;
+		return pe->pdev;
+	}
+
+	/* start from the primary bus of a multi-device PE (if it's cached) */
+	if (pe->bus)
+		iter->cur_bdfn = pe->bus->busno << 8;
+
+	return pnv_pe_iter_next(pe);
+}
+
+#define for_each_dev_in_ioda_pe(pe, state, dev) \
+	for (dev = pnv_pe_iter_init(pe, &s); dev; dev = pnv_pe_iter_next(s))
+
 static void pnv_pci_ioda2_set_bypass(struct pnv_ioda_pe *pe, bool enable);
 static void pnv_pci_configure_bus(struct pci_bus *bus);
 
