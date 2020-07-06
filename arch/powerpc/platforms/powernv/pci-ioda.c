@@ -888,6 +888,44 @@ static void pnv_ioda_unset_peltv(struct pnv_phb *phb,
 		pe_warn(pe, "OPAL error %lld remove self from PELTV\n", rc);
 }
 
+/*
+ * Associates a single BDFN with a PE
+ */
+static int pnv_ioda_pe_map_dev(struct pnv_ioda_pe *pe, u16 bdfn)
+{
+	struct pnv_phb *phb = pe->phb;
+
+	rc = opal_pci_set_pe(phb->opal_id, pe->pe_number, bdfn,
+			     OpalPciBusAll,
+			     OPAL_COMPARE_RID_DEVICE_NUMBER
+			     OPAL_COMPARE_RID_FUNCTION_NUMBER,
+			     OPAL_MAP_PE);
+	if (rc)
+		return rc;
+
+	phb->ioda.pe_rmap[bdfn] = pe->pe_number;
+
+	return 0;
+}
+
+static int pnv_ioda_pe_unmap_dev(struct pnv_ioda_pe *pe, u16 bdfn)
+{
+	struct pnv_phb *phb = pe->phb;
+
+	rc = opal_pci_set_pe(phb->opal_id, pe->pe_number, bdfn,
+			     OpalPciBusAll,
+			     OPAL_COMPARE_RID_DEVICE_NUMBER
+			     OPAL_COMPARE_RID_FUNCTION_NUMBER,
+			     OPAL_UNMAP_PE);
+	if (rc)
+		return rc;
+
+	phb->ioda.pe_rmap[bdfn] = IODA_PE_INVALID;
+
+	return 0;
+}
+
+
 static int pnv_ioda_deconfigure_pe(struct pnv_phb *phb, struct pnv_ioda_pe *pe)
 {
 	struct pci_dev *parent;
@@ -1174,12 +1212,14 @@ static struct pnv_ioda_pe *pnv_ioda_setup_dev_PE(struct pci_dev *dev)
 
 	pe_info(pe, "Associated device to PE\n");
 
-	if (pnv_ioda_configure_pe(phb, pe)) {
+	if (pnv_ioda_configure_pe(phb, pe) ||
+	    pnv_ioda_pe_map_dev(pe, pe->rid)) {
 		/* XXX What do we do here ? */
 		pnv_ioda_free_pe(pe);
 		pe->pdev = NULL;
 		return NULL;
 	}
+
 
 	/* Put PE to the list */
 	mutex_lock(&phb->ioda.pe_list_mutex);
@@ -1242,6 +1282,7 @@ static struct pnv_ioda_pe *pnv_ioda_setup_bus_PE(struct pci_bus *bus, bool all)
 		pe_info(pe, "Secondary bus %pad associated with PE#%x\n",
 			&bus->busn_res.start, pe->pe_number);
 
+	// XXX: associate devices?
 	if (pnv_ioda_configure_pe(phb, pe)) {
 		/* XXX What do we do here ? */
 		pnv_ioda_free_pe(pe);
@@ -1614,7 +1655,8 @@ static void pnv_ioda_setup_vf_PE(struct pci_dev *pdev, u16 num_vfs)
 			pci_domain_nr(pdev->bus), pdev->bus->number,
 			PCI_SLOT(vf_devfn), PCI_FUNC(vf_devfn), pe_num);
 
-		if (pnv_ioda_configure_pe(phb, pe)) {
+		if (pnv_ioda_configure_pe(phb, pe) ||
+		    pnv_ioda_pe_map_dev(phb, pe->rid)) {
 			/* XXX What do we do here ? */
 			pnv_ioda_free_pe(pe);
 			pe->pdev = NULL;
@@ -3232,7 +3274,13 @@ static void pnv_pci_configure_bus(struct pci_bus *bus)
 	if (!pe)
 		return;
 
+	/*
+	 * Map all the MMIO segments that are touched by the BARs of devices
+	 * on this bus. FIXME: We should probably map all the MMIO available
+	 * for hotplug too..
+	 */
 	pnv_ioda_setup_pe_seg(pe);
+
 	switch (phb->type) {
 	case PNV_PHB_IODA1:
 		pnv_pci_ioda1_setup_dma_pe(phb, pe);

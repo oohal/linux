@@ -99,6 +99,22 @@ struct pnv_ioda_pe {
 	struct list_head	list;
 };
 
+
+struct pnv_ioda_segmap {
+	unsigned long		size;
+	unsigned long		segsize;
+	unsigned long		base;
+	unsigned long 		*map;
+};
+
+enum {
+	IODA_SEG_M32,
+	IODA_SEG_M64,
+	IODA_SEG_IO,
+	IODA_SEG_DMA32,
+	IODA_SEG_END,
+};
+
 #define PNV_PHB_FLAG_EEH	(1 << 0)
 
 struct pnv_phb {
@@ -142,29 +158,20 @@ struct pnv_phb {
 
 		/* 64-bit MMIO window */
 		unsigned int		m64_bar_idx;
-		unsigned long		m64_size;
-		unsigned long		m64_segsize;
-		unsigned long		m64_base;
 		unsigned long		m64_bar_alloc;
 
-		/* IO ports */
-		unsigned int		io_size;
-		unsigned int		io_segsize;
-		unsigned int		io_pci_base;
+		/* memory segments */
+		struct pnv_ioda_segmap 	m32;
+		struct pnv_ioda_segmap 	m64;
+
+		/* IODA1 only */
+		struct pnv_ioda_segmap 	io;
+		struct pnv_ioda_segmap 	dma32;
 
 		/* PE allocation */
 		struct mutex		pe_alloc_mutex;
 		unsigned long		*pe_alloc;
 		struct pnv_ioda_pe	*pe_array;
-
-		/* M32 & IO segment maps */
-		unsigned int		*m64_segmap;
-		unsigned int		*m32_segmap;
-		unsigned int		*io_segmap;
-
-		/* DMA32 segment maps - IODA1 only */
-		unsigned int		dma32_count;
-		unsigned int		*dma32_segmap;
 
 		/* IRQ chip */
 		int			irq_chip_init;
