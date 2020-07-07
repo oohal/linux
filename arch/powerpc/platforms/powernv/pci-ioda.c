@@ -197,6 +197,166 @@ static inline bool pnv_pci_is_m64_flags(unsigned long resource_flags)
 	return (resource_flags & flags) == flags;
 }
 
+#if 0
+		}
+	} else if ((res->flags & IORESOURCE_MEM) &&
+		   !pnv_pci_is_m64(phb, res)) {
+		region.start = res->start -
+			       phb->hose->mem_offset[0] -
+			       phb->ioda.m32_pci_base;
+		region.end   = res->end -
+			       phb->hose->mem_offset[0] -
+			       phb->ioda.m32_pci_base;
+		index = region.start / phb->ioda.m32_segsize;
+
+		while (index < phb->ioda.total_pe_num &&
+		       region.start <= region.end) {
+			phb->ioda.m32_segmap[index] = pe->pe_number;
+			rc = opal_pci_map_pe_mmio_window(phb->opal_id,
+				pe->pe_number, OPAL_M32_WINDOW_TYPE, 0, index);
+			if (rc != OPAL_SUCCESS) {
+				pr_err("%s: Error %lld mapping M32 segment#%d to PE#%x",
+				       __func__, rc, index, pe->pe_number);
+				break;
+			}
+
+			region.start += phb->ioda.m32_segsize;
+			index++;
+		}
+	}
+#endif
+
+static struct pnv_ioda_pe *pnv_ioda_gather_segments(struct pnv_ioda_win *window,
+						    struct resource *res,
+						    unsigned long *bitmap)
+{
+	/* FIXME: When claiming segments we want to claim all the segments in
+	 * that window that aren't part of a subordinate bus window. I guess
+	 * that means we need to iterate over each device and claim against
+	 * their device BARs while ignoring the bridge window BARs?
+	 *
+	 * How does the BAR allocator lay those out? Just by size?
+	 */
+	int max_segs = phb->ioda.total_pe_num;
+	resource_size_t start, end;
+
+	// work out the span of segments we need to address
+	start = ALIGN_DOWN(res->start - segmap->pci_base) / segmap->segsize;
+	end   = ALIGN_UP(res->end     - segmap->pci_base) / segmap->segsize;
+
+	pr_err("%pR spans seg %#x..%#x\n", r, start, end);
+
+	bitmap_set(map, index, end - start + 1);
+
+#if 0
+	/*
+	 * XXX: is the end address inclusive or exclusive? If it's exclusive
+	 * we should probably ALIGN_DOWN()
+	 */
+
+	/*
+		pnv_ioda_parse_m64_window(phb);
+		phb->ioda.m32_pci_base = hose->mem_resources[0].start - hose->mem_offset[0];
+		phb->ioda.io_pci_base = 0;
+
+		base = phb->ioda.m64_base; // 
+	sgsz = phb->ioda.m64_segsize;
+	for (i = 0; i <= PCI_ROM_RESOURCE; i++) {
+		r = &pdev->resource[i];
+		if (!r->parent || !pnv_pci_is_m64(phb, r))
+			continue;
+
+		start = ALIGN_DOWN(r->start - base, sgsz);
+		end = ALIGN(r->end - base, sgsz);
+	*/
+
+	for (index = start; index <= end; index++) {
+		bitmap_set(map, index, start - end);
+		segmap->map[index] = pe->pe_number;
+		/* assign this segment to this PE */
+		rc = opal_pci_map_pe_mmio_window(phb->opal_id,
+						 pe->pe_number,
+						 segmap->type,
+						 0, /* meaning? */
+						 index);
+		if (rc != OPAL_SUCCESS) {
+			pr_err("%s: Error %lld mapping IO segment#%d to PE#%x\n",
+			       __func__, rc, index, pe->pe_number);
+			return rc; /* caller handles unmapping segments */
+		}
+#endif
+	}
+}
+
+/* Windows, Segments, and the OPAL API.
+ *
+ * The opal_pci_map_pe_mmio_window has three params of interest:
+ *
+ * 1. The window type (IO, M32, M64)
+ * 2. The window ID
+ * 3. The segment number
+ *
+ * For IO (when supported) and M32 we have:
+ * 	A single window (window zero)
+ * 	Segments in each window which can be individaully assigned to a PE.
+ *
+ * For M64 things are a bit more complex. In the HW we have the "M64 BAR Table"
+ * and each M64 BAR in this table can be used to define a window. The config
+ * of these windows depends on the hardware generation.
+ *
+ * On P7IOC there are:
+ * 	16 windows (BARs), 8 segments per BAR, remappable
+ *
+ * PHB3:
+ * 	16 windows, each can be configured as:
+ * 		fixed 256 segment per window
+ * 		single mappable segment per window
+ *
+ * PHB4:
+ * 	16 windows, each can be configured as:
+ * 		fixed 256/512 segment per window *,
+ * 		single remappable segment per window,
+ * 		fixed 8/16/32/64/128 segment windows with a selectable base PE
+ *
+ * 	* The hardware actually supports remapping these "fixed" windows.
+ * 	  However, most (shipped0 OPAL firmware build don't have that support
+ * 	  implemented for various reasons that are dumb.
+ *
+ * For M64 we can have multiple windows. The segments inside those windows
+ * *might* be controllable (it is on p7ioc and PHB4, but not PHB3).
+ *
+ * NB: In the device-tree we get the physical address space for the 64bit
+ * MMIO area from the "ibm,opal-m64-window" property. Despite the name it's
+ * not actually a window as far as the OPAL API is concerned.
+ *
+ */
+
+
+static struct pnv_ioda_pe *pnv_ioda_claim_segments(struct pnv_phb *phb,
+						   struct pnv_ioda_win *window,
+						   const unsigned long *bitmap,
+						   struct pnv_ioda_pe *pe)
+{
+	for_each_set_bit(i, bitmap, phb->ioda.total_pe_num) {
+
+		/* */
+
+		rc = opal_pci_map_pe_mmio_window(phb->opal_id,
+						 pe->pe_number,
+						 segmap->type,
+						 0, /* window num is always zero */
+						index);
+	}
+
+	OPAL_M32_WINDOW_TYPE = 1,
+	OPAL_M64_WINDOW_TYPE = 2,
+	OPAL_IO_WINDOW_TYPE  = 3
+
+
+}
+
+
+
 static struct pnv_ioda_pe *pnv_ioda_init_pe(struct pnv_phb *phb, int pe_no)
 {
 	s64 rc;
@@ -539,6 +699,9 @@ static void __init pnv_ioda_parse_m64_window(struct pnv_phb *phb)
 	}
 
 	/* Configure M64 informations */
+	// NB: the format of the ibm,opal-m64-window is the same as the normal
+	// "ranges" property. i.e. <pci bus addr><host phys addr><size> with
+	// each field being 64bits long
 	res = &hose->mem_resources[1];
 	res->name = dn->full_name;
 	res->start = of_translate_address(dn, r + 2);
@@ -1550,11 +1713,13 @@ static int pnv_pci_vf_assign_m64(struct pci_dev *pdev, u16 num_vfs)
 				     GFP_KERNEL);
 	if (!iov->m64_map)
 		return -ENOMEM;
+
 	/* Initialize the m64_map to IODA_INVALID_M64 */
 	for (i = 0; i < m64_bars ; i++)
 		for (j = 0; j < PCI_SRIOV_NUM_BARS; j++)
 			iov->m64_map[i][j] = IODA_INVALID_M64;
 
+	size = pci_iov_resource_size(dev, res);
 
 	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++) {
 		res = &pdev->resource[i + PCI_IOV_RESOURCES];
@@ -1562,6 +1727,7 @@ static int pnv_pci_vf_assign_m64(struct pci_dev *pdev, u16 num_vfs)
 			continue;
 
 		for (j = 0; j < m64_bars; j++) {
+			/* find a free m64 BAR */
 			do {
 				win = find_next_zero_bit(&phb->ioda.m64_bar_alloc,
 						phb->ioda.m64_bar_idx + 1, 0);
