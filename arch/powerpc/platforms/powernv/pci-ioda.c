@@ -1430,6 +1430,99 @@ static int pnv_pci_vf_release_m64(struct pci_dev *pdev, u16 num_vfs)
 	return 0;
 }
 
+
+/*
+ * PHB3 and beyond support "accordion" windows. The window's address range
+ * is subdivided into phb->ioda.total_pe_num segments and there's a 1-1
+ * mapping between PEs and segments.
+ *
+ * They're called that because as the window size changes the segment sizes
+ * change with it. Sort of like an accordion, sort of.
+ */
+static int pnv_ioda_map_m64_accordion(struct pnv_phb *phb,
+				      int window_id,
+				      resource_size_t start,
+				      resource_size_t size)
+{
+	int64_t rc;
+
+	rc = opal_pci_set_phb_mem_window(phb->opal_id,
+					 OPAL_M64_WINDOW_TYPE,
+					 window_id,
+					 start,
+					 0, /* unused */
+					 size);
+
+	rc = opal_pci_phb_mmio_enable(phb->opal_id,
+				      OPAL_M64_WINDOW_TYPE,
+				      window_id,
+				      M64_ACTION_SPLIT);
+out:
+	if (rc)
+		pr_err("Failed to map M64 window #%d: %lld\n", win, rc);
+	return;
+}
+
+static int pnv_ioda_map_m64_single(struct pnv_phb *phb,
+				   int pe_num,
+				   int window_id,
+				   resource_size_t start,
+				   resource_size_t size)
+{
+	int64_t rc;
+
+	/*
+	 * The API for setting up m64 mmio windows seems to have been designed
+	 * with P7-IOC in mind. For that chip each M64 BAR (window) had a fixed
+	 * split of 8 equally sized segments each of which could individually
+	 * assigned to a PE.
+	 *
+	 * The problem with this is that the API doesn't have any way to
+	 * communicate the number of segments we want on a BAR. This wasn't
+	 * a problem for p7-ioc since you didn't have a choice, but the
+	 * single PE windows added in PHB3 don't map cleanly to this API.
+	 *
+	 * As a result we've got this slightly awkward process where we
+	 * call opal_pci_map_pe_mmio_window() to put the single in single
+	 * PE mode, and set the PE for the window before setting the address
+	 * bounds. We need to do it this way because the single PE windows
+	 * for PHB3 have different alignment requirements on PHB3.
+	 */
+	rc = opal_pci_map_pe_mmio_window(phb->opal_id,
+					 pe_num,
+					 OPAL_M64_WINDOW_TYPE,
+					 window_id,
+					 0);
+	if (rc)
+		goto out;
+
+	/*
+	 * NB: In single PE mode the window needs to be aligned to 16MB rather.
+	 */
+	rc = opal_pci_set_phb_mem_window(phb->opal_id,
+					 OPAL_M64_WINDOW_TYPE,
+					 window,
+					 start,
+					 0, /* ignored by FW, m64 is 1-1 */
+					 size);
+	if (rc)
+		goto out;
+
+	/*
+	 * Now actually enable it. We specified the BAR should be in "non-split"
+	 * mode so FW will validate that the BAR is in single PE mode.
+	 */
+	rc = opal_pci_phb_mmio_enable(phb->opal_id,
+				      OPAL_M64_WINDOW_TYPE,
+				      window,
+				      M64_ACTION_NON_SPLIT);
+out:
+	if (rc)
+		pr_err("Error mapping single PE BAR\n");
+
+	return rc;
+}
+
 static int pnv_pci_vf_assign_m64(struct pci_dev *pdev, u16 num_vfs)
 {
 	struct pnv_iov_data   *iov;
@@ -1480,42 +1573,21 @@ static int pnv_pci_vf_assign_m64(struct pci_dev *pdev, u16 num_vfs)
 			iov->m64_map[j][i] = win;
 
 			if (iov->m64_single_mode) {
-				size = pci_iov_resource_size(pdev,
-							PCI_IOV_RESOURCES + i);
+				size = pci_iov_resource_size(pdev, PCI_SRIOV_NUM_BARS + i);
 				start = res->start + size * j;
+
+				rc = pnv_ioda_map_m64_single(phb, pe_num, win, start, end);
 			} else {
+				/*
+				 * Map a single m64 which covers this SR-IOV BAR
+				 * the segment size should match the stride
+				 * between VFs.
+				 */
 				size = resource_size(res);
 				start = res->start;
+
+				rc = pnv_ioda_map_m64_accordion(phb, win, start, end);
 			}
-
-			/* Map the M64 here */
-			if (iov->m64_single_mode) {
-				pe_num = iov->pe_num_map[j];
-				rc = opal_pci_map_pe_mmio_window(phb->opal_id,
-						pe_num, OPAL_M64_WINDOW_TYPE,
-						iov->m64_map[j][i], 0);
-			}
-
-			rc = opal_pci_set_phb_mem_window(phb->opal_id,
-						 OPAL_M64_WINDOW_TYPE,
-						 iov->m64_map[j][i],
-						 start,
-						 0, /* unused */
-						 size);
-
-
-			if (rc != OPAL_SUCCESS) {
-				dev_err(&pdev->dev, "Failed to map M64 window #%d: %lld\n",
-					win, rc);
-				goto m64_failed;
-			}
-
-			if (iov->m64_single_mode)
-				rc = opal_pci_phb_mmio_enable(phb->opal_id,
-				     OPAL_M64_WINDOW_TYPE, iov->m64_map[j][i], 2);
-			else
-				rc = opal_pci_phb_mmio_enable(phb->opal_id,
-				     OPAL_M64_WINDOW_TYPE, iov->m64_map[j][i], 1);
 
 			if (rc != OPAL_SUCCESS) {
 				dev_err(&pdev->dev, "Failed to enable M64 window #%d: %llx\n",
