@@ -238,7 +238,9 @@ struct pnv_iov_data {
 
 	/* number of VFs enabled */
 	u16     num_vfs;
-	unsigned int *pe_num_map;	/* PE# for the first VF PE or array */
+
+	/* pointer to the array of VF PEs. num_vfs long*/
+	struct pnv_ioda_pe *vf_pe_arr;
 
 	/* Did we map the VF BARs with single-PE IODA BARs? */
 	bool    m64_single_mode;
