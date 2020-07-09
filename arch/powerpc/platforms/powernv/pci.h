@@ -243,8 +243,11 @@ struct pnv_iov_data {
 	/* Did we map the VF BARs with single-PE IODA BARs? */
 	bool    m64_single_mode;
 
-	int     (*m64_map)[PCI_SRIOV_NUM_BARS];
-#define IODA_INVALID_M64        (-1)
+	/*
+	 * Bit mask used to track which m64 windows that we used to map the
+	 * SR-IOV BARs for this device.
+	 */
+	DECLARE_BITMAP(used_m64_bar_mask, 64);
 
 	/*
 	 * If we map the SR-IOV BARs with a segmented window then
