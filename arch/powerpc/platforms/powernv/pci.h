@@ -236,14 +236,20 @@ struct pnv_iov_data {
 	/* number of VFs IOV BAR expanded. FIXME: rename this to something less bad */
 	u16     vfs_expanded;
 
+	/*
+	 * indicates if we need to move our IOV BAR to account for our
+	 * allocated PE number when enabling VFs.
+	 */
+	bool    need_shift;
+
 	/* number of VFs enabled */
 	u16     num_vfs;
 
 	/* pointer to the array of VF PEs. num_vfs long*/
 	struct pnv_ioda_pe *vf_pe_arr;
 
-	/* Did we map the VF BARs with single-PE IODA BARs? */
-	bool    m64_single_mode;
+	/* Did we map the VF BAR with single-PE IODA BARs? */
+	bool    m64_single_mode[PCI_SRIOV_NUM_BARS];
 
 	/*
 	 * Bit mask used to track which m64 windows that we used to map the
