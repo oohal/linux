@@ -98,6 +98,9 @@ int64_t opal_pci_shpc(uint64_t phb_id, uint64_t shpc_action, uint8_t *state);
 
 int64_t opal_pci_phb_mmio_enable(uint64_t phb_id, uint16_t window_type,
 				 uint16_t window_num, uint16_t enable);
+int64_t opal_pci_phb_mmio_configure(uint64_t phb_id, uint16_t window_type,
+				    uint16_t window_num, uint16_t segment_count,
+				    uint16_t segment_base, uint16_t table);
 int64_t opal_pci_set_phb_mem_window(uint64_t phb_id, uint16_t window_type,
 				    uint16_t window_num,
 				    uint64_t starting_real_address,
