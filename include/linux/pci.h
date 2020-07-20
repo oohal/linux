@@ -941,6 +941,7 @@ enum {
 	PCI_ENABLE_PROC_DOMAINS	= 0x00000010,	/* Enable domains in /proc */
 	PCI_COMPAT_DOMAIN_0	= 0x00000020,	/* ... except domain 0 */
 	PCI_SCAN_ALL_PCIE_DEVS	= 0x00000040,	/* Scan all, not just dev 0 */
+	PCI_IGNORE_NON_PREFETCH = 0x00000080,	/* Ignore the non-pref bit */
 };
 
 #define PCI_IRQ_LEGACY		(1 << 0) /* Allow legacy interrupts */

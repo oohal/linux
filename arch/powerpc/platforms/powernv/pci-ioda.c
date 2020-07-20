@@ -204,9 +204,21 @@ void pnv_ioda_free_pe(struct pnv_ioda_pe *pe)
 /* The default M64 BAR is shared by all PEs */
 static int pnv_ioda2_init_m64(struct pnv_phb *phb)
 {
-	const char *desc;
 	struct resource *r;
+	const char *desc;
 	s64 rc;
+	int window_type = OPAL_ENABLE_M64_SPLIT_REMAP;
+
+	/* we should probably check this is supported in the DT */
+	if (opal_check_token(OPAL_PCI_PHB_MMIO_CONFIGURE)) {
+		opal_pci_phb_mmio_configure(phb->opal_id, OPAL_M64_WINDOW_TYPE,
+					    phb->ioda.m64_bar_idx,
+					    OPAL_ENABLE_M64_SPLIT_REMAP,
+					    phb->num_pes,
+					    0);
+
+		window_type = OPAL_ENABLE_M64_SPLIT_REMAP;
+	}
 
 	/* Configure the default M64 BAR */
 	rc = opal_pci_set_phb_mem_window(phb->opal_id,
@@ -224,7 +236,7 @@ static int pnv_ioda2_init_m64(struct pnv_phb *phb)
 	rc = opal_pci_phb_mmio_enable(phb->opal_id,
 				      OPAL_M64_WINDOW_TYPE,
 				      phb->ioda.m64_bar_idx,
-				      OPAL_ENABLE_M64_SPLIT);
+				      window_type);
 	if (rc != OPAL_SUCCESS) {
 		desc = "enabling";
 		goto fail;

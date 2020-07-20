@@ -245,11 +245,17 @@ resource_size_t __weak pcibios_align_resource(void *data,
 static int __pci_assign_resource(struct pci_bus *bus, struct pci_dev *dev,
 		int resno, resource_size_t size, resource_size_t align)
 {
+	unsigned long res_flags = IORESOURCE_PREFETCH | IORESOURCE_MEM_64;
 	struct resource *res = dev->resource + resno;
 	resource_size_t min;
 	int ret;
 
 	min = (res->flags & IORESOURCE_IO) ? PCIBIOS_MIN_IO : PCIBIOS_MIN_MEM;
+
+
+	res_flags = IORESOURCE_PREFETCH | IORESOURCE_MEM_64;
+	if (pci_has_flag(PCI_IGNORE_PREFETCH))
+		res_flags &= ~IORESOURCE_PREFETCH;
 
 	/*
 	 * First, try exact prefetching match.  Even if a 64-bit

@@ -1266,6 +1266,14 @@ void __pci_bus_size_bridges(struct pci_bus *bus, struct list_head *realloc_head)
 		prefmask = IORESOURCE_MEM | IORESOURCE_PREFETCH;
 		if (pref && (pref->flags & IORESOURCE_MEM_64)) {
 			prefmask |= IORESOURCE_MEM_64;
+
+			/*
+			 * If it's safe to do so we can put 64bit non-prefetchable
+			 * BARs into the 64bit prefetchable window.
+			 */
+			if (!pci_has_flag(PCI_IGNORE_PREFETCH))
+				prefmask &= ~IORESOURCE_PREFETCH;
+
 			ret = pbus_size_mem(bus, prefmask, prefmask,
 				prefmask, prefmask,
 				realloc_head ? 0 : additional_mmio_pref_size,
