@@ -208,7 +208,6 @@ struct pci_dn {
 	int     (*m64_map)[PCI_SRIOV_NUM_BARS];	/* Only used on powernv */
 	int     last_allow_rc;			/* Only used on pseries */
 #endif /* CONFIG_PCI_IOV */
-	int	mps;			/* Maximum Payload Size */
 	struct list_head child_list;
 	struct list_head list;
 	struct resource holes[PCI_SRIOV_NUM_BARS];
