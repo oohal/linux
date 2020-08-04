@@ -199,8 +199,6 @@ struct pci_dn {
 #ifdef CONFIG_EEH
 	struct eeh_dev *edev;		/* eeh device */
 #endif
-#define IODA_INVALID_PE		0xFFFFFFFF
-	unsigned int pe_number;
 #ifdef CONFIG_PCI_IOV
 	u16     vfs_expanded;		/* number of VFs IOV BAR expanded */
 	u16     num_vfs;		/* number of VFs enabled*/
@@ -215,6 +213,12 @@ struct pci_dn {
 	struct list_head list;
 	struct resource holes[PCI_SRIOV_NUM_BARS];
 };
+
+/*
+ * FIXME: this is shared between PowerNV and pseries even though pseries
+ * has no concept of an IODA PE. Cool.
+ */
+#define IODA_INVALID_PE		0xFFFFFFFF
 
 /* Get the pointer to a device_node's pci_dn */
 #define PCI_DN(dn)	((struct pci_dn *) (dn)->data)

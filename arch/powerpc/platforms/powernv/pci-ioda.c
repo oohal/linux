@@ -1003,16 +1003,13 @@ out:
 static struct pnv_ioda_pe *pnv_ioda_setup_dev_PE(struct pci_dev *dev)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
-	struct pci_dn *pdn = pci_get_pdn(dev);
-	struct pnv_ioda_pe *pe;
+	struct pnv_ioda_pe *pe = pnv_ioda_get_pe(dev);
 
-	if (!pdn) {
-		pr_err("%s: Device tree node not associated properly\n",
-			   pci_name(dev));
+	/* Already has a PE assigned? huh? */
+	if (pe) {
+		WARN_ON(1);
 		return NULL;
 	}
-	if (pdn->pe_number != IODA_INVALID_PE)
-		return NULL;
 
 	pe = pnv_ioda_alloc_pe(phb, 1);
 	if (!pe) {
@@ -1021,19 +1018,18 @@ static struct pnv_ioda_pe *pnv_ioda_setup_dev_PE(struct pci_dev *dev)
 		return NULL;
 	}
 
-	/* NOTE: We don't get a reference for the pointer in the PE
-	 * data structure, both the device and PE structures should be
-	 * destroyed at the same time. However, removing nvlink
-	 * devices will need some work.
+	/* NOTE: We don't get a reference for the pdev pointer in the PE
+	 * data structure. The pci_dev's release function will clean up the
+	 * ioda_pe state, so:
 	 *
-	 * At some point we want to remove the PDN completely anyways
+	 * a) We can't take a ref otherwise the release function is never called
+	 * b) The pe->pdev pointer will always point to valid pci_dev (or NULL)
 	 */
-	pdn->pe_number = pe->pe_number;
 	pe->flags = PNV_IODA_PE_DEV;
 	pe->pdev = dev;
 	pe->pbus = NULL;
 	pe->mve_number = -1;
-	pe->rid = dev->bus->number << 8 | pdn->devfn;
+	pe->rid = dev->bus->number << 8 | dev->devfn;
 	pe->device_count++;
 
 	pe_info(pe, "Associated device to PE\n");
@@ -1041,7 +1037,6 @@ static struct pnv_ioda_pe *pnv_ioda_setup_dev_PE(struct pci_dev *dev)
 	if (pnv_ioda_configure_pe(phb, pe)) {
 		/* XXX What do we do here ? */
 		pnv_ioda_free_pe(pe);
-		pdn->pe_number = IODA_INVALID_PE;
 		pe->pdev = NULL;
 		return NULL;
 	}
@@ -1126,7 +1121,6 @@ static struct pnv_ioda_pe *pnv_ioda_setup_npu_PE(struct pci_dev *npu_pdev)
 	long rid;
 	struct pnv_ioda_pe *pe;
 	struct pci_dev *gpu_pdev;
-	struct pci_dn *npu_pdn;
 	struct pnv_phb *phb = pci_bus_to_pnvhb(npu_pdev->bus);
 
 	/*
@@ -1160,9 +1154,7 @@ static struct pnv_ioda_pe *pnv_ioda_setup_npu_PE(struct pci_dev *npu_pdev)
 			 */
 			dev_info(&npu_pdev->dev,
 				"Associating to existing PE %x\n", pe_num);
-			npu_pdn = pci_get_pdn(npu_pdev);
-			rid = npu_pdev->bus->number << 8 | npu_pdn->devfn;
-			npu_pdn->pe_number = pe_num;
+			rid = npu_pdev->bus->number << 8 | npu_pdev->devfn;
 			phb->ioda.pe_rmap[rid] = pe->pe_number;
 			pe->device_count++;
 
@@ -2815,9 +2807,7 @@ static void pnv_ioda_release_pe(struct pnv_ioda_pe *pe)
 
 static void pnv_pci_release_device(struct pci_dev *pdev)
 {
-	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
 	struct pnv_ioda_pe *pe = pnv_ioda_get_pe(pdev);
-	struct pci_dn *pdn = pci_get_pdn(pdev);
 
 	/* The VF PE state is torn down when sriov_disable() is called */
 	if (pdev->is_virtfn)
@@ -2835,16 +2825,6 @@ static void pnv_pci_release_device(struct pci_dev *pdev)
 	if (pdev->is_physfn)
 		kfree(pdev->dev.archdata.iov_data);
 #endif
-
-	/*
-	 * PCI hotplug can happen as part of EEH error recovery. The @pdn
-	 * isn't removed and added afterwards in this scenario. We should
-	 * set the PE number in @pdn to an invalid one. Otherwise, the PE's
-	 * device count is decreased on removing devices while failing to
-	 * be increased on adding devices. It leads to unbalanced PE's device
-	 * count and eventually make normal PCI hotplug path broken.
-	 */
-	pdn->pe_number = IODA_INVALID_PE;
 
 	WARN_ON(--pe->device_count < 0);
 	if (pe->device_count == 0)
