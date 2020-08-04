@@ -2624,23 +2624,20 @@ static bool pnv_pci_enable_device_hook(struct pci_dev *dev)
 
 static bool pnv_ocapi_enable_device_hook(struct pci_dev *dev)
 {
-	struct pci_controller *hose = pci_bus_to_host(dev->bus);
-	struct pnv_phb *phb = hose->private_data;
-	struct pci_dn *pdn;
+	struct pnv_phb *phb = pci_bus_to_pnvhb(dev->bus);
 	struct pnv_ioda_pe *pe;
 
 	if (!phb->initialized)
 		return true;
 
-	pdn = pci_get_pdn(dev);
-	if (!pdn)
-		return false;
-
-	if (pdn->pe_number == IODA_INVALID_PE) {
+	/* FIXME: why do we do this here? */
+	pe = pnv_ioda_get_pe(dev);
+	if (!pe) {
 		pe = pnv_ioda_setup_dev_PE(dev);
 		if (!pe)
 			return false;
 	}
+
 	return true;
 }
 
