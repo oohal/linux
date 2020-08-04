@@ -781,19 +781,8 @@ static int pnv_ioda_set_peltv(struct pnv_phb *phb,
 	while (pdev) {
 		struct pnv_ioda_pe *parent = pnv_ioda_get_pe(pdev);
 
-		/*
-		 * FIXME: This is called from pcibios_setup_bridge(), which is called
-		 * from the bottom (leaf) bridge to the root. This means that this
-		 * doesn't actually setup the PELT-V entries since the PEs for
-		 * the bridges above assigned after this is run for the leaf.
-		 *
-		 * FIXMEFIXME: might not be true since moving PE configuration
-		 * into pcibios_bus_add_device().
-		 */
-		if (!parent)
+		if (WARN_ON(!parent || parent->pe_number == IODA_INVALID_PE))
 			break;
-
-		WARN_ON(!parent || parent->pe_number == IODA_INVALID_PE);
 
 		ret = pnv_ioda_set_one_peltv(phb, parent, pe, is_add);
 		if (ret)
