@@ -1225,7 +1225,6 @@ static void pnv_pci_ioda1_setup_dma_pe(struct pnv_phb *phb,
 static void pnv_pci_ioda_dma_dev_setup(struct pci_dev *pdev)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(pdev->bus);
-	struct pci_dn *pdn = pci_get_pdn(pdev);
 	struct pnv_ioda_pe *pe;
 
 	/* Check if the BDFN for this device is associated with a PE yet */
@@ -1268,8 +1267,6 @@ static void pnv_pci_ioda_dma_dev_setup(struct pci_dev *pdev)
 		}
 	}
 
-	if (pdn)
-		pdn->pe_number = pe->pe_number;
 	pe->device_count++;
 
 	WARN_ON(get_dma_ops(&pdev->dev) != &dma_iommu_ops);
