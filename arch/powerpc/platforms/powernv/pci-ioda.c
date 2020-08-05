@@ -2536,9 +2536,6 @@ static void pnv_pci_configure_bus(struct pci_bus *bus)
 	if (WARN_ON(list_empty(&bus->devices)))
 		return;
 
-	/* Reserve PEs according to used M64 resources */
-	pnv_ioda_reserve_m64_pe(bus, NULL, all);
-
 	/*
 	 * Assign PE. We might run here because of partial hotplug.
 	 * For the case, we just pick up the existing PE and should
