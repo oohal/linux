@@ -1430,10 +1430,9 @@ static int pnv_eeh_get_pe(struct pci_controller *hose,
 	 * to EEH core.
 	 */
 	pnv_pe = &phb->ioda.pe_array[pe_no];
-	if (pnv_pe->flags & PNV_IODA_PE_SLAVE) {
+	if (pnv_pe->flags & PNV_IODA_PE_COMPOUND) {
 		pnv_pe = pnv_pe->master;
-		WARN_ON(!pnv_pe ||
-			!(pnv_pe->flags & PNV_IODA_PE_MASTER));
+		WARN_ON(!pnv_pe || !(pnv_pe->flags & PNV_IODA_PE_MASTER));
 		pe_no = pnv_pe->pe_number;
 	}
 

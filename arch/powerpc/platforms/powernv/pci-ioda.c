@@ -379,7 +379,7 @@ static void pnv_ioda_reserve_m64_pe(struct pci_bus *bus,
 static struct pnv_ioda_pe *pnv_ioda_pick_m64_pe(struct pci_bus *bus, bool all)
 {
 	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
-	struct pnv_ioda_pe *master_pe, *pe;
+	struct pnv_ioda_pe *head_pe, *pe;
 	unsigned long size, *pe_alloc;
 	int i;
 
@@ -413,26 +413,27 @@ static struct pnv_ioda_pe *pnv_ioda_pick_m64_pe(struct pci_bus *bus, bool all)
 	 * Figure out the master PE and put all slave PEs to master
 	 * PE's list to form compound PE.
 	 */
-	master_pe = NULL;
+	head_pe = NULL;
 	i = -1;
 	while ((i = find_next_bit(pe_alloc, phb->ioda.total_pe_num, i + 1)) <
 		phb->ioda.total_pe_num) {
 		pe = &phb->ioda.pe_array[i];
 
 		phb->ioda.m64_segmap[pe->pe_number] = pe->pe_number;
-		if (!master_pe) {
-			pe->flags |= PNV_IODA_PE_MASTER;
-			INIT_LIST_HEAD(&pe->slaves);
-			master_pe = pe;
+		if (!head_pe) {
+			pe->flags |= PNV_IODA_PE_HEAD | PNV_IODA_PE_COMPOUND;
+			INIT_LIST_HEAD(&pe->compound_list);
+			head_pe = pe;
+			head_pe->head_pe = pe; /* makes life easier */
 		} else {
-			pe->flags |= PNV_IODA_PE_SLAVE;
-			pe->master = master_pe;
-			list_add_tail(&pe->list, &master_pe->slaves);
+			pe->flags |= PNV_IODA_PE_COMPOUND;
+			pe->head_pe = head_pe;
+			list_add_tail(&pe->list, &head_pe->compound_list);
 		}
 	}
 
 	kfree(pe_alloc);
-	return master_pe;
+	return head_pe;
 }
 
 static void __init pnv_ioda_parse_m64_window(struct pnv_phb *phb)
@@ -525,16 +526,37 @@ static void __init pnv_ioda_parse_m64_window(struct pnv_phb *phb)
 		phb->init_m64 = pnv_ioda2_init_m64;
 }
 
+static void pnv_ioda_pe_set_freeze_state(struct pnv_ioda_pe *pe, bool frozen)
+{
+	const char *desc = frozen ? "freezing" : "unfreezing";
+
+	if (pe->flags & PNV_IODA_PE_COMPOUND)
+		pe = pe->head_pe;
+
+	if (freeze) {
+		rc = opal_pci_eeh_freeze_set(phb->opal_id, pe->pe_number,
+					     OPAL_EEH_ACTION_SET_FREEZE_ALL);
+	} else {
+		rc = opal_pci_eeh_freeze_clear(phb->opal_id, pe->pe_number,
+					       OPAL_EEH_ACTION_SET_CLEAR_ALL);
+	}
+
+	if (rc != OPAL_SUCCESS) {
+		pr_warn("%s: Failure %lld freezing PHB#%x-PE#%x\n",
+			__func__, rc, phb->hose->global_number, pe_no);
+		return;
+	}
+}
+
 static void pnv_ioda_freeze_pe(struct pnv_phb *phb, int pe_no)
 {
-	struct pnv_ioda_pe *pe = &phb->ioda.pe_array[pe_no];
-	struct pnv_ioda_pe *slave;
+	struct pnv_ioda_pe *tmp, *pe = &phb->ioda.pe_array[pe_no];
 	s64 rc;
 
 	/* Fetch master PE */
-	if (pe->flags & PNV_IODA_PE_SLAVE) {
+	if (pe->flags & PNV_IODA_PE_COMPOUND) {
 		pe = pe->master;
-		if (WARN_ON(!pe || !(pe->flags & PNV_IODA_PE_MASTER)))
+		if (WARN_ON(!pe || !(pe->flags & PNV_IODA_PE_HEAD)))
 			return;
 
 		pe_no = pe->pe_number;
@@ -550,7 +572,7 @@ static void pnv_ioda_freeze_pe(struct pnv_phb *phb, int pe_no)
 		return;
 	}
 
-	/* Freeze slave PEs */
+	/* Sync the freeze state for the whole compound PE */
 	if (!(pe->flags & PNV_IODA_PE_MASTER))
 		return;
 
@@ -573,7 +595,7 @@ static int pnv_ioda_unfreeze_pe(struct pnv_phb *phb, int pe_no, int opt)
 	/* Find master PE */
 	pe = &phb->ioda.pe_array[pe_no];
 	if (pe->flags & PNV_IODA_PE_SLAVE) {
-		pe = pe->master;
+		pe = pe->head;
 		WARN_ON(!pe || !(pe->flags & PNV_IODA_PE_MASTER));
 		pe_no = pe->pe_number;
 	}
@@ -590,14 +612,14 @@ static int pnv_ioda_unfreeze_pe(struct pnv_phb *phb, int pe_no, int opt)
 		return 0;
 
 	/* Clear frozen state for slave PEs */
-	list_for_each_entry(slave, &pe->slaves, list) {
+	list_for_each_entry(tmp, &pe->slaves, list) {
 		rc = opal_pci_eeh_freeze_clear(phb->opal_id,
-					     slave->pe_number,
+					     tmp->pe_number,
 					     opt);
 		if (rc != OPAL_SUCCESS) {
 			pr_warn("%s: Failure %lld clear %d on PHB#%x-PE#%x\n",
 				__func__, rc, opt, phb->hose->global_number,
-				slave->pe_number);
+				tmp->pe_number);
 			return -EIO;
 		}
 	}

@@ -27,8 +27,8 @@ enum pnv_phb_model {
 #define PNV_IODA_PE_DEV		(1 << 0)	/* PE has single PCI device	*/
 #define PNV_IODA_PE_BUS		(1 << 1)	/* PE has primary PCI bus	*/
 #define PNV_IODA_PE_BUS_ALL	(1 << 2)	/* PE has subordinate buses	*/
-#define PNV_IODA_PE_MASTER	(1 << 3)	/* Master PE in compound case	*/
-#define PNV_IODA_PE_SLAVE	(1 << 4)	/* Slave PE in compound case	*/
+#define PNV_IODA_PE_HEAD	(1 << 3)	/* Head PE in compound case	*/
+#define PNV_IODA_PE_COMPOUND	(1 << 4)	/* Part of a compound PE	*/
 #define PNV_IODA_PE_VF		(1 << 5)	/* PE for one VF 		*/
 
 /*
@@ -98,15 +98,21 @@ struct pnv_ioda_pe {
 	 */
 	int			mve_number;
 
-	/* PEs in compound case */
-	struct pnv_ioda_pe	*master;
-	struct list_head	slaves;
+	/* compound PE tracking*/
+	struct pnv_ioda_pe	*head_pe;
+	struct list_head	compound_list;
 
-	/* Link in list of PE#s */
+	/*
+	 * NB: This is used as a list node in two seperate cases:
+	 *
+	 * 1. The link in phb->ioda.pe_list for: !COMPOUND || HEAD
+	 * 2. The link in head_pe->compound_list for: COMPOUND && !HEAD
+	 */
 	struct list_head	list;
 };
 
-#define PNV_PHB_FLAG_EEH	(1 << 0)
+#define PNV_PHB_FLAG_EEH		(1 << 0)
+#define PNV_PHB_FLAG_EEH_ENABLED	(1 << 1)
 
 struct pnv_phb {
 	struct pci_controller	*hose;
@@ -193,6 +199,12 @@ struct pnv_phb {
 	u8			*diag_data;
 };
 
+static inline bool pnv_phb_eeh_enabled(struct pnv_phb *phb)
+{
+	u64 flags = PNV_PHB_FLAG_EEH | PNV_PHB_FLAG_EEH_ENABLED;
+
+	return (pnv_phb->flags & flags) == flags;
+}
 
 /* IODA PE management */
 

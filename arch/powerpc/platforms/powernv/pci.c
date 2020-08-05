@@ -765,11 +765,29 @@ static int pnv_pci_read_config(struct pci_bus *bus,
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	ret = pnv_pci_cfg_read(phb, bdfn, where, size, val);
-	if (phb->flags & PNV_PHB_FLAG_EEH && edev) {
+	if (ret || *val == EEH_IO_ERROR_VALUE(size)) {
+		if (pnv_eeh_active(phb))
+			eeh_dev_check_failure(edev);
+		else
+
+		
+		err = true;
+
+	} else (pnv_eeh_exists(phb)) {
+		/* if EEH is disabled we still need to clear the error */
+	}
+
+	if (phb->flags & PNV_PHB_HAS_EEH) {
+		if (phb->flags & PNV_PHB_EEH_ENABLED) {
+			/* report the failure to the eeh core */
+		}
+	} else {
+
+	}
 		if (*val == EEH_IO_ERROR_VALUE(size) &&
 		    eeh_dev_check_failure(edev))
                         return PCIBIOS_DEVICE_NOT_FOUND;
-	} else {
+	} else if (pnv_phb_has_eeh(phb)) {
 		pnv_pci_config_check_eeh(phb, bdfn);
 	}
 
