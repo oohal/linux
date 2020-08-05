@@ -711,42 +711,14 @@ int pnv_pci_cfg_write(struct pci_dn *pdn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-#if CONFIG_EEH
-static bool pnv_pci_cfg_check(struct pci_dn *pdn)
-{
-	struct eeh_dev *edev = NULL;
-	struct pnv_phb *phb = pdn->phb->private_data;
-
-	/* EEH not enabled ? */
-	if (!(phb->flags & PNV_PHB_FLAG_EEH))
-		return true;
-
-	/* PE reset or device removed ? */
-	edev = pdn->edev;
-	if (edev) {
-		if (edev->pe &&
-		    (edev->pe->state & EEH_PE_CFG_BLOCKED))
-			return false;
-
-		if (edev->mode & EEH_DEV_REMOVED)
-			return false;
-	}
-
-	return true;
-}
-#else
-static inline pnv_pci_cfg_check(struct pci_dn *pdn)
-{
-	return true;
-}
-#endif /* CONFIG_EEH */
-
 static int pnv_pci_read_config(struct pci_bus *bus,
 			       unsigned int devfn,
 			       int where, int size, u32 *val)
 {
+	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
+	u16 bdfn = bus->number << 8 | devfn;
+	struct pnv_ioda_pe *pe = pnv_pci_bdfn_to_pe(phb, bdfn);
 	struct pci_dn *pdn;
-	struct pnv_phb *phb;
 	int ret;
 
 	*val = 0xFFFFFFFF;
@@ -754,11 +726,16 @@ static int pnv_pci_read_config(struct pci_bus *bus,
 	if (!pdn)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	if (!pnv_pci_cfg_check(pdn))
+	/*
+	 * Check if we're supposed to allow config cycles to this PE.
+	 * We might be blocking it 
+	 * check if something (probably EEH) has told us to block config
+	 * accesses to this PE.
+	 */
+	if (test_bit(pe->pe_number, phb->ioda.block_cfg_map))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	ret = pnv_pci_cfg_read(pdn, where, size, val);
-	phb = pdn->phb->private_data;
 	if (phb->flags & PNV_PHB_FLAG_EEH && pdn->edev) {
 		if (*val == EEH_IO_ERROR_VALUE(size) &&
 		    eeh_dev_check_failure(pdn->edev))
@@ -774,19 +751,20 @@ static int pnv_pci_write_config(struct pci_bus *bus,
 				unsigned int devfn,
 				int where, int size, u32 val)
 {
+	struct pnv_phb *phb = pci_bus_to_pnvhb(bus);
+	u16 bdfn = bus->number << 8 | devfn;
+	struct pnv_ioda_pe *pe = pnv_pci_bdfn_to_pe(phb, bdfn);
 	struct pci_dn *pdn;
-	struct pnv_phb *phb;
 	int ret;
 
 	pdn = pci_get_pdn_by_devfn(bus, devfn);
 	if (!pdn)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	if (!pnv_pci_cfg_check(pdn))
+	if (test_bit(pe->pe_number, phb->ioda.block_cfg_map))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	ret = pnv_pci_cfg_write(pdn, where, size, val);
-	phb = pdn->phb->private_data;
 	if (!(phb->flags & PNV_PHB_FLAG_EEH))
 		pnv_pci_config_check_eeh(pdn);
 

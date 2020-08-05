@@ -2406,6 +2406,7 @@ static void pnv_pci_ioda_create_dbgfs(void)
 	struct pci_controller *hose, *tmp;
 	struct pnv_phb *phb;
 	char name[16];
+	struct debugfs_u32_array *array = kzalloc(sizeof(*array), GFP_KERNEL);
 
 	list_for_each_entry_safe(hose, tmp, &hose_list, list_node) {
 		phb = hose->private_data;
@@ -2420,6 +2421,11 @@ static void pnv_pci_ioda_create_dbgfs(void)
 					   phb, &pnv_pci_diag_data_fops);
 		debugfs_create_file_unsafe("dump_ioda_pe_state", 0200, phb->dbgfs,
 					   phb, &pnv_pci_ioda_pe_dump_fops);
+
+		// hack
+		array->array		= (void *)phb->ioda.block_cfg_map;
+		array->n_elements	= phb->ioda.total_pe_num / (sizeof(u32) * 8);
+		debugfs_create_u32_array("bitmap", 0444, phb->dbgfs, array);
 	}
 #endif /* CONFIG_DEBUG_FS */
 }
@@ -2851,6 +2857,7 @@ static void pnv_npu_disable_device(struct pci_dev *pdev)
 	struct eeh_dev *edev = pci_dev_to_eeh_dev(pdev);
 	struct eeh_pe *eehpe = edev ? edev->pe : NULL;
 
+	//  FIXME: AWFUL
 	if (eehpe && eeh_ops && eeh_ops->reset)
 		eeh_ops->reset(eehpe, EEH_RESET_HOT);
 }
@@ -3148,6 +3155,9 @@ static void __init pnv_pci_init_ioda_phb(struct device_node *np,
 	default:
 		hose->controller_ops = pnv_pci_ioda_controller_ops;
 	}
+
+
+	memset(&phb->ioda.block_cfg_map, 0, sizeof(phb->ioda.block_cfg_map));
 
 	ppc_md.pcibios_default_alignment = pnv_pci_default_alignment;
 

@@ -188,6 +188,9 @@ struct pnv_phb {
 
 		/* Reverse map of PEs, indexed by {bus, devfn} */
 		unsigned int		pe_rmap[0x10000];
+
+		// FIXME: allocate
+		DECLARE_BITMAP(block_cfg_map, 512);
 	} ioda;
 
 	/* PHB and hub diagnostics */

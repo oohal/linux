@@ -1672,6 +1672,16 @@ static int pnv_eeh_restore_config(struct eeh_dev *edev)
 	return ret;
 }
 
+static void pnv_eeh_block_config(struct eeh_pe *pe, bool block)
+{
+	struct pnv_phb *phb = pe->phb->private_data; // *groan*
+
+	if (block)
+		bitmap_set(phb->ioda.block_cfg_map, pe->config_addr, 1);
+	else
+		bitmap_clear(phb->ioda.block_cfg_map, pe->config_addr, 1);
+}
+
 static struct eeh_ops pnv_eeh_ops = {
 	.name                   = "powernv",
 	.init                   = pnv_eeh_init,
@@ -1686,6 +1696,7 @@ static struct eeh_ops pnv_eeh_ops = {
 	.write_config           = pnv_eeh_write_config,
 	.next_error		= pnv_eeh_next_error,
 	.restore_config		= pnv_eeh_restore_config,
+	.block_config		= pnv_eeh_block_config,
 	.notify_resume		= NULL
 };
 
