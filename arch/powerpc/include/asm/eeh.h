@@ -230,7 +230,6 @@ struct eeh_ops {
 	int (*next_error)(struct eeh_pe **pe);
 	int (*restore_config)(struct eeh_dev *edev);
 	int (*notify_resume)(struct eeh_dev *edev);
-	void (*block_config)(struct eeh_pe *pe, bool block);
 };
 
 extern int eeh_subsystem_flags;
@@ -314,9 +313,6 @@ int eeh_pe_reset(struct eeh_pe *pe, int option, bool include_passed);
 int eeh_pe_configure(struct eeh_pe *pe);
 int eeh_pe_inject_err(struct eeh_pe *pe, int type, int func,
 		      unsigned long addr, unsigned long mask);
-
-
-void eeh_block_config(struct eeh_pe *root, bool block);
 
 /**
  * EEH_POSSIBLE_ERROR() -- test for possible MMIO failure.

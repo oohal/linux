@@ -556,24 +556,6 @@ void eeh_pe_state_mark(struct eeh_pe *root, int state)
 }
 EXPORT_SYMBOL_GPL(eeh_pe_state_mark);
 
-void eeh_block_config(struct eeh_pe *root, bool block)
-{
-	struct eeh_pe *pe;
-
-	// FIXME: er, shouldn't we be doing the "include passed" thing for 
-	// the mark case too?
-	eeh_for_each_pe(root, pe) {
-		if (block)
-			eeh_pe_state_mark(pe, EEH_PE_CFG_BLOCKED);
-		else
-			eeh_pe_state_clear(pe, EEH_PE_CFG_BLOCKED, true);
-
-		/* tell the platform to enforce the blocking */
-		if (eeh_ops->block_config)
-			eeh_ops->block_config(pe, block);
-	}
-}
-
 /**
  * eeh_pe_mark_isolated
  * @pe: EEH PE
@@ -597,7 +579,7 @@ void eeh_pe_mark_isolated(struct eeh_pe *root)
 		}
 		/* Block PCI config access if required */
 		if (pe->state & EEH_PE_CFG_RESTRICTED)
-			eeh_block_config(pe, true);
+			pe->state |= EEH_PE_CFG_BLOCKED;
 	}
 }
 EXPORT_SYMBOL_GPL(eeh_pe_mark_isolated);
@@ -665,7 +647,7 @@ void eeh_pe_state_clear(struct eeh_pe *root, int state, bool include_passed)
 
 		/* Unblock PCI config access if required */
 		if (pe->state & EEH_PE_CFG_RESTRICTED)
-			eeh_block_config(pe, false);
+			pe->state &= ~EEH_PE_CFG_BLOCKED;
 	}
 }
 
