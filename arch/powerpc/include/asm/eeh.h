@@ -151,6 +151,8 @@ struct eeh_dev {
 	/* VF specific properties */
 	struct pci_dev *physfn;		/* Associated SRIOV PF		*/
 	int vf_index;			/* Index of this VF 		*/
+
+	struct pci_driver *driver; // used during recovery
 };
 
 /* "fmt" must be a simple literal string */

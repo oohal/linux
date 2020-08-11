@@ -92,6 +92,12 @@ void pci_hp_remove_devices(struct pci_bus *bus)
 }
 EXPORT_SYMBOL_GPL(pci_hp_remove_devices);
 
+
+void pci_hp_scan_device(struct pci_bus, int bdfn)
+{
+
+}
+
 /**
  * pci_hp_add_devices - adds new pci devices to bus
  * @bus: the indicated PCI bus
