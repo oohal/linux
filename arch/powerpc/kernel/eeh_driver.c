@@ -611,7 +611,7 @@ int eeh_pe_reset_and_recover(struct eeh_pe *pe)
 }
 
 /**
- * eeh_reset_device - Perform actual reset of a pci slot
+ * eeh_reset_devices - Perform actual reset of a pci slot
  * @driver_eeh_aware: Does the device's driver provide EEH support?
  * @pe: EEH PE
  * @bus: PCI bus corresponding to the isolcated slot
@@ -621,22 +621,12 @@ int eeh_pe_reset_and_recover(struct eeh_pe *pe)
  * During the reset, udev might be invoked because those affected
  * PCI devices will be removed and then added.
  */
-static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
-			    struct eeh_rmv_data *rmv_data,
-			    bool driver_eeh_aware)
+static int eeh_reset_devices(struct eeh_pe *pe, struct pci_bus *bus,
+			    struct eeh_rmv_data *rmv_data)
 {
 	time64_t tstamp;
 	int cnt, rc;
-	struct eeh_dev *edev;
-	struct eeh_pe *tmp_pe;
-	bool any_passed = false;
-
-	/*
-	 * If a PE has devices that are passed to a guest then that guest is
-	 * responsible for managing that PE rather than us.
-	 */
-	eeh_for_each_pe(pe, tmp_pe)
-		any_passed |= eeh_pe_passed(tmp_pe);
+	struct eeh_dev *edev, *tmp;
 
 	/* pcibios will clear the counter; save the value */
 	cnt = pe->freeze_count;
@@ -654,13 +644,7 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
 	//
 	// note that it only does this for eeh-unaware devices.
 	eeh_pe_state_mark(pe, EEH_PE_KEEP);
-	if (any_passed || driver_eeh_aware || (pe->type & EEH_PE_VF)) {
-		eeh_pe_dev_traverse(pe, eeh_rmv_device, rmv_data);
-	} else {
-		pci_lock_rescan_remove();
-		pci_hp_remove_devices(bus);
-		pci_unlock_rescan_remove();
-	}
+	eeh_pe_dev_traverse(pe, eeh_rmv_device, rmv_data);
 
 	// 2. assert PE reset. this probably calls out to firmware and doesn't
 	//    look at much of the state linux has
@@ -690,10 +674,9 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
 		return rc;
 	}
 
-	if (!driver_eeh_aware || rmv_data->removed_dev_count) {
+	if (rmv_data->removed_dev_count) {
 		// wait out userspace hotplug stuff
-		pr_info("EEH: Sleep 5s ahead of %s hotplug\n",
-			(driver_eeh_aware ? "partial" : "complete"));
+		pr_info("EEH: Sleep 5s after hot-removing devices");
 		ssleep(5);
 
 		/*
@@ -732,12 +715,6 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
 			// restoring the SR-IOV capability then we'll be broken.
 			eeh_add_virt_device(edev);
 		} else {
-			// in the !driver_eeh_aware case we also remove bridges.
-			// As a result any child bus PEs need their bus pointer
-			// invalidated. just... urgh
-			if (!driver_eeh_aware)
-				eeh_pe_state_clear(pe, EEH_PE_PRI_BUS, true);
-
 			// 7. b) rescan the bus. pci_hp_add_devices() is smart
 			//       enough to ignore devices which already have a
 			//       pci_dev. the eeh_dev is attached to the newly
@@ -1007,19 +984,6 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 	pr_info("EEH: Collect temporary log\n");
 	eeh_slot_error_detail(pe, EEH_LOG_TEMP);
 
-	/* If all device drivers were EEH-unaware, then shut
-	 * down all of the device drivers, and hope they
-	 * go down willingly, without panicing the system.
-	 */
-	if (result == PCI_ERS_RESULT_NONE) {
-		pr_info("EEH: Reset with hotplug activity\n");
-		rc = eeh_reset_device(pe, bus, NULL, false);
-		if (rc) {
-			pr_warn("%s: Unable to reset, err=%d\n", __func__, rc);
-			goto recover_failed;
-		}
-	}
-
 	/* If all devices reported they can proceed, then re-enable MMIO */
 	if (result == PCI_ERS_RESULT_CAN_RECOVER) {
 		pr_info("EEH: Enable I/O for affected devices\n");
@@ -1055,9 +1019,10 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 	}
 
 	/* If any device called out for a reset, then reset the slot */
-	if (result == PCI_ERS_RESULT_NEED_RESET) {
+	if (result == PCI_ERS_RESULT_NEED_RESET ||
+	    result == PCI_ERS_RESULT_NONE) {
 		pr_info("EEH: Reset without hotplug activity\n");
-		rc = eeh_reset_device(pe, bus, &rmv_data, true);
+		rc = eeh_reset_devices(pe, bus, &rmv_data);
 		if (rc) {
 			pr_warn("%s: Cannot reset, err=%d\n", __func__, rc);
 			goto recover_failed;
