@@ -204,8 +204,6 @@ int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 		BUG_ON(rc);
 	}
 
-	pci_have_rescan_remove();
-
 	pci_device_add(virtfn, virtfn->bus);
 	rc = pci_iov_sysfs_link(dev, virtfn, id);
 	if (rc)
@@ -245,8 +243,6 @@ void pci_iov_remove_virtfn(struct pci_dev *dev, int id)
 	 */
 	if (virtfn->dev.kobj.sd)
 		sysfs_remove_link(&virtfn->dev.kobj, "physfn");
-
-	pci_have_rescan_remove();
 
 	pci_stop_and_remove_bus_device(virtfn);
 	virtfn_remove_bus(dev->bus, virtfn->bus);

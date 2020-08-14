@@ -3237,12 +3237,6 @@ void pci_unlock_rescan_remove(void)
 }
 EXPORT_SYMBOL_GPL(pci_unlock_rescan_remove);
 
-void pci_have_rescan_remove(void)
-{
-	WARN_ON(!mutex_is_locked(&pci_rescan_remove_lock));
-}
-EXPORT_SYMBOL_GPL(pci_have_rescan_remove);
-
 static int __init pci_sort_bf_cmp(const struct device *d_a,
 				  const struct device *d_b)
 {
