@@ -21,6 +21,7 @@
 
 struct eeh_rmv_data {
 	struct list_head removed_vf_list;
+	struct list_head removed_dev_list;
 	int removed_dev_count;
 };
 
@@ -512,7 +513,10 @@ static void eeh_rmv_device(struct eeh_dev *edev, void *userdata)
 		}
 	}
 
-	/* Remove it from PCI subsystem */
+	/*
+	 * Otherwise remove it and put it on the list of devices we need
+	 * to rescan after the reset
+	 */
 	pr_info("EEH: Removing %s without EEH sensitive driver\n",
 		pci_name(dev));
 	edev->mode |= EEH_DEV_DISCONNECTED;
@@ -529,23 +533,40 @@ static void eeh_rmv_device(struct eeh_dev *edev, void *userdata)
 	} else {
 		pci_lock_rescan_remove();
 		pci_stop_and_remove_bus_device(dev);
+		if (rmv_data)
+			list_add(&edev->rmv_entry, &rmv_data->removed_dev_list);
 		pci_unlock_rescan_remove();
 	}
+
+	/*
+	 * When the pci_dev is removed from the bus eeh_remove_device() is
+	 * called on it. We have the EEH_PE_KEEP flag set so edev remains
+	 * alive with the DISCONNECTED flag set.
+	 */
+	WARN_ON(edev->pdev || !(edev->mode & EEH_DEV_DISCONNECTED));
 }
 
-static void *eeh_pe_detach_dev(struct eeh_pe *pe, void *userdata)
+static void eeh_dev_detach(struct eeh_dev *edev)
 {
-	struct eeh_dev *edev, *tmp;
+	if (WARN_ON(!(edev->mode & EEH_DEV_DISCONNECTED) || edev->pdev))
+		return;
 
-	eeh_pe_for_each_dev(pe, edev, tmp) {
-		if (!(edev->mode & EEH_DEV_DISCONNECTED))
-			continue;
+	/*
+	 * If EEH_DEV_IRQ_DISABLED is set we'll enable the IRQ at the end of
+	 * recovery. The IRQ is disabled as a part of the pci_dev teardown
+	 * so we don't want to re-enable it for removed devices.
+	 */
+	edev->mode &= ~(EEH_DEV_DISCONNECTED | EEH_DEV_IRQ_DISABLED);
 
-		edev->mode &= ~(EEH_DEV_DISCONNECTED | EEH_DEV_IRQ_DISABLED);
-		eeh_pe_tree_remove(edev);
-	}
-
-	return NULL;
+	/*
+	 * take the device out of the eeh_pe's device list so we can re-probe it
+	 *
+	 * FIXME: This seems to be required because eeh_probe_device(), or
+	 * more accurately the platform eeh_ops->eeh_probe(), doesn't seem
+	 * to cope with an already-added eeh_dev. Maybe we should just fix
+	 * this there? More investigation is required.
+	 */
+	eeh_pe_tree_remove(edev);
 }
 
 /*
@@ -624,6 +645,7 @@ int eeh_pe_reset_and_recover(struct eeh_pe *pe)
 static int eeh_reset_devices(struct eeh_pe *pe, struct pci_bus *bus,
 			    struct eeh_rmv_data *rmv_data)
 {
+	struct eeh_dev *tmp, *edev;
 	time64_t tstamp;
 	int cnt, rc;
 
@@ -690,28 +712,35 @@ static int eeh_reset_devices(struct eeh_pe *pe, struct pci_bus *bus,
 		// wait out userspace hotplug stuff
 		pr_info("EEH: Sleep 5s after hot-removing devices");
 		ssleep(5);
+	}
 
+	if (!list_empty(&rmv_data->removed_dev_list)) {
 		/*
 		 * 6. eeh_pe_deatch_dev() finally removes the edev from the PE's
 		 *    device list. We also clear the DISCONNECTED flag.
 		 */
-		eeh_pe_traverse(pe, eeh_pe_detach_dev, NULL);
+		list_for_each(edev, &rmv_data.removed_dev_list, rmv_entry)
+			eeh_dev_detach(edev);
 
-		if (!(pe->type & EEH_PE_VF)) {
-			/*
-			 * 7. rescan the bus. pci_hp_add_devices() is smart
-			 *    enough to ignore devices which already have a
-			 *    pci_dev. the eeh_dev is attached to the newly
-			 *    scanned pci_dev when eeh_probe_device() is
-			 *    called.
-			 *
-			 * NB: Any removed VFs are re-added before sending the
-			 *     resume notifications in eeh_handle_normal_event()
-			 */
-			pci_hp_add_devices(bus);
-		}
+		/*
+		 * 7. rescan the bus. pci_hp_add_devices() is smart
+		 *    enough to ignore devices which already have a
+		 *    pci_dev. the eeh_dev is attached to the newly
+		 *    scanned pci_dev when eeh_probe_device() is
+		 *    called.
+		 */
+		pci_hp_add_devices(bus);
+
+		/* flush the removed device list */
+		list_for_each_safe(edev, tmp, &rmv_data.removed_dev_list, rmv_entry)
+			list_del(&edev.rmv_list);
+
+		/*
+		 * NB: We don't process rmv_data.removed_vf_list here
+		 *     because we need to call the PF's .slot_reset()
+		 *     callback first.
+		 */
 	}
-
 
 	/*
 	 * 8. we're done manipulating pci devices so we can clear PE_KEEP
@@ -852,8 +881,10 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 	struct eeh_pe *tmp_pe;
 	int rc = 0;
 	enum pci_ers_result result = PCI_ERS_RESULT_NONE;
-	struct eeh_rmv_data rmv_data =
-		{LIST_HEAD_INIT(rmv_data.removed_vf_list), 0};
+	struct eeh_rmv_data rmv_data = {
+		LIST_HEAD_INIT(rmv_data.removed_vf_list),
+		LIST_HEAD_INIT(rmv_data.removed_dev_list),
+		0};
 	int devices = 0;
 
 	bus = eeh_pe_bus_get(pe);
@@ -1028,11 +1059,16 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 	if ((result == PCI_ERS_RESULT_RECOVERED) ||
 	    (result == PCI_ERS_RESULT_NONE)) {
 		/*
-		 * For those hot removed VFs, we should add back them after PF
-		 * get recovered properly.
+		 * Restore any removed VFs. The logic here is the same as when
+		 * processing rmv_data.removed_dev_list in eeh_reset_devices(),
+		 * but we do the VFs here because we need may need to call
+		 * .slot_reset() for the PF first.
 		 */
 		list_for_each_entry_safe(edev, tmp, &rmv_data.removed_vf_list,
 					 rmv_entry) {
+
+			eeh_dev_detach(edev);
+
 			eeh_add_virt_device(edev);
 			list_del(&edev->rmv_entry);
 		}
