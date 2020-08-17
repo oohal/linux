@@ -626,7 +626,6 @@ static int eeh_reset_devices(struct eeh_pe *pe, struct pci_bus *bus,
 {
 	time64_t tstamp;
 	int cnt, rc;
-	struct eeh_dev *edev, *tmp;
 
 	/* pcibios will clear the counter; save the value */
 	cnt = pe->freeze_count;
@@ -693,51 +692,21 @@ static int eeh_reset_devices(struct eeh_pe *pe, struct pci_bus *bus,
 		ssleep(5);
 
 		/*
-		 * The EEH device is still connected with its parent
-		 * PE. We should disconnect it so the binding can be
-		 * rebuilt when adding PCI devices.
-		 */
-		edev = list_first_entry(&pe->edevs, struct eeh_dev, entry);
-
-		/*
 		 * 6. eeh_pe_deatch_dev() finally removes the edev from the PE's
 		 *    device list. We also clear the DISCONNECTED flag.
 		 */
 		eeh_pe_traverse(pe, eeh_pe_detach_dev, NULL);
 
-		if (pe->type & EEH_PE_VF) {
+		if (!(pe->type & EEH_PE_VF)) {
 			/*
-			 * 7. a) If the PE being recovered is a VF PE then we
-			 * 	 can re-add the VF here. We can do this because:
+			 * 7. rescan the bus. pci_hp_add_devices() is smart
+			 *    enough to ignore devices which already have a
+			 *    pci_dev. the eeh_dev is attached to the newly
+			 *    scanned pci_dev when eeh_probe_device() is
+			 *    called.
 			 *
-			 * 	 a) VF PEs only contain a single VF device.
-			 * 	 b) VF PEs are always children of the PF's PE.
-			 * 	 c) VF PEs are always leaf nodes in the PE tree.
-			 *
-			 *
-			 * 	 c) The fact we're recovering a leaf node means
-			 * 	    the parent node (containing the PF) has not
-			 * 	    been reset.
-			 *       VF PEs are always leaf nodes in the PE tree and
-			 *       that they only contain a single VF. 
-			 *       we know the PF is still alive (probably).
-			 *
-			 *       If this isn't a VF PE then we might have reset
-			 *       the PF so we need to defer adding VFs until
-			 *       after we've told the PF driver to resume.
-			 *
-			 * Honestly i'm not even sure that's sufficent. If the
-			 * PF driver's .resume() callback defers the work of
-			 * restoring the SR-IOV capability then we'll be broken.
-			 */
-			eeh_add_virt_device(edev);
-		} else {
-			/*
-			 * 7. b) rescan the bus. pci_hp_add_devices() is smart
-			 *       enough to ignore devices which already have a
-			 *       pci_dev. the eeh_dev is attached to the newly
-			 *       scanned pci_dev when eeh_probe_device() is
-			 *       called.
+			 * NB: Any removed VFs are re-added before sending the
+			 *     resume notifications in eeh_handle_normal_event()
 			 */
 			pci_hp_add_devices(bus);
 		}
