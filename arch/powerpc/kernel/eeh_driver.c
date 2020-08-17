@@ -631,6 +631,10 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
 	struct eeh_pe *tmp_pe;
 	bool any_passed = false;
 
+	/*
+	 * If a PE has devices that are passed to a guest then that guest is
+	 * responsible for managing that PE rather than us.
+	 */
 	eeh_for_each_pe(pe, tmp_pe)
 		any_passed |= eeh_pe_passed(tmp_pe);
 
@@ -639,53 +643,69 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
 	tstamp = pe->tstamp;
 
 	/*
-	 * We don't remove the corresponding PE instances because
-	 * we need the information afterwords. The attached EEH
-	 * devices are expected to be attached soon when calling
-	 * into pci_hp_add_devices().
+	 * A handy-dandy guide to what's going on here:
+	 *
+	 * step 1. Remove any pci_dev which can be removed and rescanned.
+	 *
+	 *         i.e. anything that's not:
+	 *         	a bridge,
+	 *         	a passed through device,
+	 *         	an eeh aware device,
+	 *         	a VF
+	 *
+	 * After eeh_rmv_device() is called for a device:
+	 *
+	 * - eeh_dev->flags has EEH_DEV_DISCONNECTED set
+	 * - eeh_dev->pdev is invalid (it was removed)
+	 * - eeh_dev is still on the parent PE's device list
+	 *
+	 * Devices that can't be removed as left as-is.
 	 */
 	eeh_pe_state_mark(pe, EEH_PE_KEEP);
 	if (any_passed || driver_eeh_aware || (pe->type & EEH_PE_VF)) {
 		eeh_pe_dev_traverse(pe, eeh_rmv_device, rmv_data);
 	} else {
+		/* XXX: ignore this bit, it's about to go away */
 		pci_lock_rescan_remove();
 		pci_hp_remove_devices(bus);
 		pci_unlock_rescan_remove();
 	}
 
 	/*
-	 * Reset the pci controller. (Asserts RST#; resets config space).
-	 * Reconfigure bridges and devices. Don't try to bring the system
-	 * up if the reset failed for some reason.
+	 * 2. assert PE reset. this probably calls out to firmware and doesn't
+	 *    look at much of the state linux has
 	 *
-	 * During the reset, it's very dangerous to have uncontrolled PCI
-	 * config accesses. So we prefer to block them. However, controlled
-	 * PCI config accesses initiated from EEH itself are allowed.
+	 * * edev state unchanged
 	 */
 	rc = eeh_pe_reset_full(pe, false);
 	if (rc)
 		return rc;
 
+	/*
+	 * 3. prevent the pci core from adding/removing devices until we've
+	 *    finish the post-reset config restoration.
+	 *
+	 * FIXME: We should probably take the lock when setting PE_KEEP above
+	 */
 	pci_lock_rescan_remove();
 
-	/* Restore PE */
+	/*
+	 * 4. restore config space using the eeh-specific config accessors.
+	 *
+	 * -> relies on the fact all removed edev's are still in the PE's list
+	 */
 	eeh_ops->configure_bridge(pe);
 	eeh_pe_restore_bars(pe);
 
-	/* Clear frozen state */
+	/* 5. thaw the PE so drivers and the pci core can do cfg / mmio. */
 	rc = eeh_clear_pe_frozen_state(pe, false);
 	if (rc) {
 		pci_unlock_rescan_remove();
 		return rc;
 	}
 
-	/* Give the system 5 seconds to finish running the user-space
-	 * hotplug shutdown scripts, e.g. ifdown for ethernet.  Yes,
-	 * this is a hack, but if we don't do this, and try to bring
-	 * the device up before the scripts have taken it down,
-	 * potentially weird things happen.
-	 */
 	if (!driver_eeh_aware || rmv_data->removed_dev_count) {
+		// wait out userspace hotplug stuff
 		pr_info("EEH: Sleep 5s ahead of %s hotplug\n",
 			(driver_eeh_aware ? "partial" : "complete"));
 		ssleep(5);
@@ -696,15 +716,64 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus,
 		 * rebuilt when adding PCI devices.
 		 */
 		edev = list_first_entry(&pe->edevs, struct eeh_dev, entry);
+
+		/*
+		 * 6. eeh_pe_deatch_dev() finally removes the edev from the PE's
+		 *    device list. We also clear the DISCONNECTED flag.
+		 */
 		eeh_pe_traverse(pe, eeh_pe_detach_dev, NULL);
+
 		if (pe->type & EEH_PE_VF) {
+			/*
+			 * 7. a) If the PE being recovered is a VF PE then we
+			 * 	 can re-add the VF here. We can do this because:
+			 *
+			 * 	 a) VF PEs only contain a single VF device.
+			 * 	 b) VF PEs are always children of the PF's PE.
+			 * 	 c) VF PEs are always leaf nodes in the PE tree.
+			 *
+			 *
+			 * 	 c) The fact we're recovering a leaf node means
+			 * 	    the parent node (containing the PF) has not
+			 * 	    been reset.
+			 *       VF PEs are always leaf nodes in the PE tree and
+			 *       that they only contain a single VF. 
+			 *       we know the PF is still alive (probably).
+			 *
+			 *       If this isn't a VF PE then we might have reset
+			 *       the PF so we need to defer adding VFs until
+			 *       after we've told the PF driver to resume.
+			 *
+			 * Honestly i'm not even sure that's sufficent. If the
+			 * PF driver's .resume() callback defers the work of
+			 * restoring the SR-IOV capability then we'll be broken.
+			 */
 			eeh_add_virt_device(edev);
 		} else {
+			/*
+			 * in the !driver_eeh_aware case we also remove bridges.
+			 * As a result any child bus PEs need their bus pointer
+			 * invalidated. just... urgh
+			 */
 			if (!driver_eeh_aware)
 				eeh_pe_state_clear(pe, EEH_PE_PRI_BUS, true);
+
+			/*
+			 * 7. b) rescan the bus. pci_hp_add_devices() is smart
+			 *       enough to ignore devices which already have a
+			 *       pci_dev. the eeh_dev is attached to the newly
+			 *       scanned pci_dev when eeh_probe_device() is
+			 *       called.
+			 */
 			pci_hp_add_devices(bus);
 		}
 	}
+
+
+	/*
+	 * 8. we're done manipulating pci devices so we can clear PE_KEEP
+	 *    and drop the rescan lock.
+	 */
 	eeh_pe_state_clear(pe, EEH_PE_KEEP, true);
 
 	pe->tstamp = tstamp;
