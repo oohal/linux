@@ -1132,6 +1132,9 @@ int eeh_unfreeze_pe(struct eeh_pe *pe)
 {
 	int ret;
 
+	pr_err("EEH: unfreezing PHB#%04x-PE#%04x\n",
+		pe->phb->global_number, pe->addr);
+
 	ret = eeh_pci_enable(pe, EEH_OPT_THAW_MMIO);
 	if (ret) {
 		pr_warn("%s: Failure %d enabling IO on PHB#%x-PE#%x\n",
