@@ -98,6 +98,7 @@ extern int remove_phb_dynamic(struct pci_controller *phb);
 
 extern struct pci_dev *of_create_pci_dev(struct device_node *node,
 					struct pci_bus *bus, int devfn);
+struct pci_dev *of_scan_pci_dev(struct pci_bus *bus, struct device_node *dn);
 
 extern unsigned int pci_parse_of_flags(u32 addr0, int bridge);
 
