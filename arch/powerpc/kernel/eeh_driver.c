@@ -463,11 +463,19 @@ static void *eeh_add_virt_device(struct eeh_dev *edev)
 	struct pci_driver *driver;
 	struct pci_dev *dev = eeh_dev_to_pci_dev(edev);
 
+	pr_info("EEH: Re-adding VF %04x:%02x:%02x.%x\n",
+		edev->controller->global_number,
+		edev->bdfn >> 8, PCI_SLOT(edev->bdfn), PCI_FUNC(edev->bdfn));
+
 	if (!(edev->physfn)) {
 		eeh_edev_warn(edev, "Not for VF\n");
 		return NULL;
 	}
 
+
+	// FIXME: this is dead code. we only get here when added to the removed
+	// device list, and we only remove devices that don't have drivers.
+	// cool.
 	driver = eeh_pcid_get(dev);
 	if (driver) {
 		if (driver->err_handler) {
