@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/module.h>
+#include <linux/of_pci.h>
 #include <linux/pci.h>
 #include <linux/pci_hotplug.h>
 #include <asm/eeh.h>
@@ -639,6 +640,78 @@ int eeh_pe_reset_and_recover(struct eeh_pe *pe)
 	return 0;
 }
 
+/*
+ * eeh_rescan_pci_dev - re-scans a single device which was reset during recovery
+ *
+ * There's probably an argument for putting this in kernel/pci-hotplug.c
+ * but this doesn't even attempt to handle re-scanning bridges, and that
+ * is 100% deliberate.
+ *
+ * There's a few platforms which rely on the various per-bus, and per-phb fixup
+ * hooks which are used the legacy PHB setup (see pci_hp_add_devices()). We only
+ * want to handle re-scanning a single non-bridge device for recovery purposes
+ * so this should live here IMO.
+ */
+static struct pci_dev *eeh_rescan_pci_dev(struct pci_bus *bus, int devfn)
+{
+	struct pci_controller *phb = pci_bus_to_host(bus);
+	struct device_node *dn;
+	struct pci_dev *dev;
+	int mode;
+
+	if (WARN_ON(!phb))
+		return NULL;
+
+	pr_info("EEH: Rescanning %04x:%02x:%02x.%x\n", phb->global_number,
+			bus->number, PCI_SLOT(devfn), PCI_FUNC(devfn));
+
+	mode = PCI_PROBE_NORMAL;
+	if (phb->controller_ops.probe_mode)
+		mode = phb->controller_ops.probe_mode(bus);
+
+	if (mode == PCI_PROBE_NORMAL) {
+		dev = pci_scan_single_device(bus, devfn);
+	} else if (mode == PCI_PROBE_DEVTREE) {
+		dn = pci_bus_to_OF_node(bus);
+		if (!dn)
+			return NULL;
+
+		dn = of_pci_find_child_device(dn, devfn);
+		if (!dn)
+			return NULL;
+
+		dev = of_scan_pci_dev(bus, dn);
+	}
+
+	/*
+	 * EEH only removes devices because there's no other way to bring a
+	 * device back to a known-good state. For bridges they should either be
+	 * implementing the error callbacks (i.e pcieport) or they should be
+	 * restorable by the platform APIs so we don't want to touch them.
+	 *
+	 * If we somehow do end up removing a bridge then any downstream devices
+	 * will mysteriously disappear. Drop a WARN to indicate there's probably
+	 * a bug somewhere (bugs? in EEH? hard to believe).
+	 */
+	WARN_ON(dev && pci_is_bridge(dev));
+
+	if (dev) {
+		// FIXME: cache the resources from the old pci_dev instead?
+		//
+		// HACK: we're using the root_bus version to avoid touching
+		// the upstream bridge resources. Also there's a good chance
+		// we *are* on a root bus.
+		pci_assign_unassigned_root_bus_resources(dev->bus);
+		pci_bus_add_device(dev);
+
+		WARN_ON(!pci_dev_to_eeh_dev(dev)); // EEH probe should re-attach to our edev
+	} else {
+		pr_err("device re-scan failed?\n");
+	}
+
+	return NULL;
+}
+
 /**
  * eeh_reset_devices - Perform actual reset of a pci slot
  * @driver_eeh_aware: Does the device's driver provide EEH support?
@@ -722,32 +795,41 @@ static int eeh_reset_devices(struct eeh_pe *pe, struct pci_bus *bus,
 		ssleep(5);
 	}
 
-	if (!list_empty(&rmv_data->removed_dev_list)) {
+	/*
+	 * NB: We don't process rmv_data.removed_vf_list here
+	 *     because we need to call the PF's .slot_reset()
+	 *     callback first.
+	 */
+	list_for_each_entry_safe(edev, tmp, &rmv_data->removed_dev_list, rmv_entry) {
+		struct pci_bus *tmp_bus;
+
+		/* After detaching eeh->pe == NULL so cache the bus */
+		tmp_bus = edev->pe->bus;
+		if (WARN_ON(!tmp_bus))
+			continue;
+
 		/*
 		 * 6. eeh_pe_deatch_dev() finally removes the edev from the PE's
 		 *    device list. We also clear the DISCONNECTED flag.
 		 */
-		list_for_each(edev, &rmv_data.removed_dev_list, rmv_entry)
-			eeh_dev_detach(edev);
+		eeh_dev_detach(edev);
 
 		/*
-		 * 7. rescan the bus. pci_hp_add_devices() is smart
-		 *    enough to ignore devices which already have a
-		 *    pci_dev. the eeh_dev is attached to the newly
-		 *    scanned pci_dev when eeh_probe_device() is
-		 *    called.
+		 * 7. rescan the device. eeh_probe_device() is called
+		 *    when re-adding the device so edev->pdev will be
+		 *    valid afterwards.
 		 */
-		pci_hp_add_devices(bus);
+		if (!eeh_rescan_pci_dev(tmp_bus, edev->bdfn & 0xff)) {
+			pr_err("EEH: Unable to re-scan %04x:%02x:%02x.%x\n",
+				edev->controller->global_number,
+				PCI_BUSNO(edev->bdfn),
+				PCI_SLOT(edev->bdfn),
+				PCI_FUNC(edev->bdfn));
+		}
 
-		/* flush the removed device list */
-		list_for_each_safe(edev, tmp, &rmv_data.removed_dev_list, rmv_entry)
-			list_del(&edev.rmv_list);
+		WARN_ON(!edev->pdev);
 
-		/*
-		 * NB: We don't process rmv_data.removed_vf_list here
-		 *     because we need to call the PF's .slot_reset()
-		 *     callback first.
-		 */
+		list_del(&edev->rmv_entry);
 	}
 
 	/*

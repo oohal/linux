@@ -345,7 +345,7 @@ void of_scan_pci_bridge(struct pci_dev *dev)
 }
 EXPORT_SYMBOL(of_scan_pci_bridge);
 
-static struct pci_dev *of_scan_pci_dev(struct pci_bus *bus,
+struct pci_dev *of_scan_pci_dev(struct pci_bus *bus,
 			    struct device_node *dn)
 {
 	struct pci_dev *dev = NULL;
