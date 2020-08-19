@@ -200,9 +200,29 @@ static ssize_t remove_id_store(struct device_driver *driver, const char *buf,
 }
 static DRIVER_ATTR_WO(remove_id);
 
+static ssize_t can_recover_show(struct device_driver *driver, char *buf)
+{
+	struct pci_driver *pdrv = to_pci_driver(driver);
+	bool supported = false;
+
+	/*
+	 * In order for recovery to work the driver needs to implement
+	 * .error_detected and .slot_reset(). Ideally .resume() should
+	 * be implemented too, but some drivers don't.
+	 */
+	if (pdrv->err_handler &&
+	    pdrv->err_handler->error_detected &&
+	    pdrv->err_handler->slot_reset)
+		supported = true;
+
+	return sprintf(buf, "%d\n", supported);
+}
+static DRIVER_ATTR_RO(can_recover);
+
 static struct attribute *pci_drv_attrs[] = {
 	&driver_attr_new_id.attr,
 	&driver_attr_remove_id.attr,
+	&driver_attr_can_recover.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(pci_drv);
