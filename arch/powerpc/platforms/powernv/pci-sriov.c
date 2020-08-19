@@ -222,6 +222,9 @@ disable_iov:
 		res->end = res->start - 1;
 	}
 
+	pci_err(pdev, "Unable to support SR-IOV, disabling\n");
+	pdev->sriov->total_VFs = 0;
+	pdev->sriov->driver_max_VFs = 0;
 	pdev->dev.archdata.iov_data = NULL;
 	kfree(iov);
 }
