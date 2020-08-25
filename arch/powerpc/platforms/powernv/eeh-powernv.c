@@ -150,43 +150,30 @@ static const struct file_operations pnv_eeh_ei_fops = {
 	.write	= pnv_eeh_ei_write,
 };
 
-static int pnv_eeh_dbgfs_set(void *data, int offset, u64 val)
+static int pnv_dbgfs_phbreg_set(void *data, u64 val)
 {
-	struct pci_controller *hose = data;
-	struct pnv_phb *phb = hose->private_data;
+	out_be64((u64 __iomem *) data, val);
 
-	out_be64(phb->regs + offset, val);
 	return 0;
 }
 
-static int pnv_eeh_dbgfs_get(void *data, int offset, u64 *val)
+static int pnv_dbgfs_phbreg_get(void *data, u64 *val)
 {
-	struct pci_controller *hose = data;
-	struct pnv_phb *phb = hose->private_data;
+	*val = in_be64((u64 __iomem *) data);
 
-	*val = in_be64(phb->regs + offset);
 	return 0;
 }
 
-#define PNV_EEH_DBGFS_ENTRY(name, reg)				\
-static int pnv_eeh_dbgfs_set_##name(void *data, u64 val)	\
-{								\
-	return pnv_eeh_dbgfs_set(data, reg, val);		\
-}								\
-								\
-static int pnv_eeh_dbgfs_get_##name(void *data, u64 *val)	\
-{								\
-	return pnv_eeh_dbgfs_get(data, reg, val);		\
-}								\
-								\
-DEFINE_SIMPLE_ATTRIBUTE(pnv_eeh_dbgfs_ops_##name,		\
-			pnv_eeh_dbgfs_get_##name,		\
-                        pnv_eeh_dbgfs_set_##name,		\
-			"0x%llx\n")
+DEFINE_DEBUGFS_ATTRIBUTE(pnv_dbgfs_phbreg_fops,
+			 pnv_dbgfs_phbreg_get,
+			 pnv_dbgfs_phbreg_set,
+			 "0x%llx");
 
-PNV_EEH_DBGFS_ENTRY(outb, 0xD10);
-PNV_EEH_DBGFS_ENTRY(inbA, 0xD90);
-PNV_EEH_DBGFS_ENTRY(inbB, 0xE10);
+void pnv_dbgfs_create_phbreg(struct pnv_phb *phb, const char *name, uint16_t offset)
+{
+	debugfs_create_file_unsafe(name, 0600, phb->dbgfs, phb->regs + offset,
+				   &pnv_dbgfs_phbreg_fops);
+}
 
 #endif /* CONFIG_DEBUG_FS */
 
@@ -260,15 +247,13 @@ int pnv_eeh_post_init(void)
 				    phb->dbgfs, hose,
 				    &pnv_eeh_ei_fops);
 
-		debugfs_create_file("err_injct_outbound", 0600,
-				    phb->dbgfs, hose,
-				    &pnv_eeh_dbgfs_ops_outb);
-		debugfs_create_file("err_injct_inboundA", 0600,
-				    phb->dbgfs, hose,
-				    &pnv_eeh_dbgfs_ops_inbA);
-		debugfs_create_file("err_injct_inboundB", 0600,
-				    phb->dbgfs, hose,
-				    &pnv_eeh_dbgfs_ops_inbB);
+		/* PHB3 error injection registers. See PHB3 spec for details */
+		pnv_dbgfs_create_phbreg(phb, "err_injct_outbound", 0xD10);
+		pnv_dbgfs_create_phbreg(phb, "err_injct_inboundA", 0xD90);
+		pnv_dbgfs_create_phbreg(phb, "err_injct_inboundB", 0xE10);
+
+		/* PHB4 injection registers. See PHB4 spec for details */
+		pnv_dbgfs_create_phbreg(phb, "err_injct_pbl", 0x1900);
 #endif /* CONFIG_DEBUG_FS */
 	}
 
