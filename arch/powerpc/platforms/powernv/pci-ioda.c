@@ -2979,6 +2979,8 @@ static void __init pnv_pci_init_ioda_phb(struct device_node *np,
 		phb->model = PNV_PHB_MODEL_P7IOC;
 	else if (of_device_is_compatible(np, "ibm,power8-pciex"))
 		phb->model = PNV_PHB_MODEL_PHB3;
+	else if (of_device_is_compatible(np, "ibm,power9-pciex"))
+		phb->model = PNV_PHB_MODEL_PHB4;
 	else if (of_device_is_compatible(np, "ibm,power8-npu-pciex"))
 		phb->model = PNV_PHB_MODEL_NPU;
 	else if (of_device_is_compatible(np, "ibm,power9-npu-pciex"))
