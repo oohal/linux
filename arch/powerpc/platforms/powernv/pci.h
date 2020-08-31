@@ -122,11 +122,6 @@ struct pnv_phb {
 	u64			regs_phys;
 	spinlock_t		lock;
 
-#ifdef CONFIG_DEBUG_FS
-	int			has_dbgfs;
-	struct dentry		*dbgfs;
-#endif
-
 	unsigned int		msi_base;
 	unsigned int		msi32_support;
 	struct msi_bitmap	msi_bmp;

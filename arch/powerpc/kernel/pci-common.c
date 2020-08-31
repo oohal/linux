@@ -132,6 +132,22 @@ struct pci_controller *pcibios_alloc_controller(struct device_node *dev)
 }
 EXPORT_SYMBOL_GPL(pcibios_alloc_controller);
 
+int ppc_pci_init_debugfs(void)
+{
+	struct pci_controller *hose, *tmp;
+	char name[16];
+
+	spin_lock(&hose_spinlock);
+
+	list_for_each(hose, tmp, &hose_list, list_node) {
+		sprintf(name, "PCI%04x", hose->global_number);
+		hose->debugfs = debugfs_create_dir(name powerpc_debugfs_root);
+	}
+
+	spin_unlock(&hose_spinlock);
+}
+arch_initcall_sync();
+
 void pcibios_free_controller(struct pci_controller *phb)
 {
 	spin_lock(&hose_spinlock);

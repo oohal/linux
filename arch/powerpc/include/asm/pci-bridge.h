@@ -125,6 +125,10 @@ struct pci_controller {
 	struct pci_dn *pci_data;
 #endif	/* CONFIG_PPC64 */
 
+#ifdef CONFIG_DEBUG_FS
+	struct dentry *debugfs;
+#endif
+
 	void *private_data;
 	struct npu *npu;
 };

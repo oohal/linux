@@ -1026,7 +1026,7 @@ static int eeh_init(void)
 	} else if ((ret = eeh_ops->init()))
 		return ret;
 
-	/* Initialize PHB PEs */
+	/* Initialize PHB PEs - needs to go into the PHB inits */
 	list_for_each_entry_safe(hose, tmp, &hose_list, list_node)
 		eeh_phb_pe_create(hose);
 
