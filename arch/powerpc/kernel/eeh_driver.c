@@ -1144,10 +1144,7 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 		eeh_set_irq_state(pe, true);
 		eeh_pe_report("slot_reset", pe, eeh_report_reset,
 			      &result);
-	}
 
-	if ((result == PCI_ERS_RESULT_RECOVERED) ||
-	    (result == PCI_ERS_RESULT_NONE)) {
 		/*
 		 * Restore any removed VFs. The logic here is the same as when
 		 * processing rmv_data.removed_dev_list in eeh_reset_devices(),
@@ -1162,7 +1159,10 @@ void eeh_handle_normal_event(struct eeh_pe *pe)
 			eeh_add_virt_device(edev);
 			list_del(&edev->rmv_entry);
 		}
+	}
 
+	if ((result == PCI_ERS_RESULT_RECOVERED) ||
+	    (result == PCI_ERS_RESULT_NONE)) {
 		/* Tell all device drivers that they can resume operations */
 		pr_info("EEH: Notify device driver to resume\n");
 		eeh_set_channel_state(pe, pci_channel_io_normal);
