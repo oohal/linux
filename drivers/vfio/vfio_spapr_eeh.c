@@ -39,7 +39,18 @@ long vfio_spapr_iommu_eeh_ioctl(struct iommu_group *group,
 	switch (cmd) {
 	case VFIO_CHECK_EXTENSION:
 		if (arg == VFIO_EEH)
-			ret = eeh_enabled() ? 1 : 0;
+			/*
+			 * XXX: In theory we can "support" EEH even when
+			 * detection is disabled, but EEH itself is still
+			 * enabled, but that may put us in a wierd state
+			 * in the hypervisor
+			 *
+			 * Better off lying to the guest and saying that EEH
+			 * is unsupported on the device. If an error occurs
+			 * then the PE will remain frozen and as far as the
+			 * guest knows it's a fatal error.
+			 */
+			ret = eeh_detection_enabled() ? 1 : 0;
 		else
 			ret = 0;
 		break;

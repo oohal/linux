@@ -449,7 +449,7 @@ int eeh_dev_check_failure(struct eeh_dev *edev)
 
 	eeh_stats.total_mmio_ffs++;
 
-	if (!eeh_enabled())
+	if (!eeh_detection_enabled())
 		return 0;
 
 	if (!edev) {
@@ -1346,11 +1346,7 @@ int eeh_pe_set_option(struct eeh_pe *pe, int option)
 	 */
 	switch (option) {
 	case EEH_OPT_ENABLE:
-		if (eeh_enabled()) {
-			ret = eeh_pe_change_owner(pe);
-			break;
-		}
-		ret = -EIO;
+		ret = eeh_pe_change_owner(pe);
 		break;
 	case EEH_OPT_DISABLE:
 		break;
@@ -1589,6 +1585,8 @@ static int proc_eeh_show(struct seq_file *m, void *v)
 				eeh_stats.total_mmio_ffs,
 				eeh_stats.false_positives,
 				eeh_stats.slot_resets);
+		if (!eeh_detection_enabled())
+			seq_printf(m, "EEH detection is disabled");
 	}
 
 	return 0;
@@ -1607,7 +1605,7 @@ static int eeh_enable_dbgfs_set(void *data, u64 val)
 
 static int eeh_enable_dbgfs_get(void *data, u64 *val)
 {
-	if (eeh_enabled())
+	if (eeh_detection_enabled())
 		*val = 0x1ul;
 	else
 		*val = 0x0ul;

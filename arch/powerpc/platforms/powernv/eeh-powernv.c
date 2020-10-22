@@ -54,7 +54,7 @@ static irqreturn_t pnv_eeh_event(int irq, void *data)
 	 */
 	disable_irq_nosync(irq);
 
-	if (eeh_enabled())
+	if (eeh_detection_enabled())
 		eeh_send_failure_event(NULL);
 
 	return IRQ_HANDLED;
@@ -154,7 +154,7 @@ static void pnv_eeh_enable_phbs(void)
 		 * Otherwise, we restore to conventional mechanism
 		 * to clear frozen PE during PCI config access.
 		 */
-		if (eeh_enabled())
+		if (eeh_detection_enabled())
 			phb->flags |= PNV_PHB_FLAG_EEH;
 		else
 			phb->flags &= ~PNV_PHB_FLAG_EEH;
@@ -194,7 +194,7 @@ int pnv_eeh_post_init(void)
 		return ret;
 	}
 
-	if (!eeh_enabled())
+	if (!eeh_detection_enabled())
 		disable_irq(eeh_event_irq);
 
 	pnv_eeh_enable_phbs();
@@ -1594,7 +1594,7 @@ static int pnv_eeh_next_error(struct eeh_pe **pe)
 	}
 
 	/* Unmask the event */
-	if (ret == EEH_NEXT_ERR_NONE && eeh_enabled())
+	if (ret == EEH_NEXT_ERR_NONE && eeh_detection_enabled())
 		enable_irq(eeh_event_irq);
 
 	return ret;

@@ -250,7 +250,7 @@ static inline bool eeh_has_flag(int flag)
         return !!(eeh_subsystem_flags & flag);
 }
 
-static inline bool eeh_enabled(void)
+static inline bool eeh_detection_enabled(void)
 {
 	return eeh_has_flag(EEH_ENABLED) && !eeh_has_flag(EEH_FORCE_DISABLED);
 }
@@ -321,7 +321,8 @@ int eeh_pe_inject_err(struct eeh_pe *pe, int type, int func,
  * If this macro yields TRUE, the caller relays to eeh_check_failure()
  * which does further tests out of line.
  */
-#define EEH_POSSIBLE_ERROR(val, type)	((val) == (type)~0 && eeh_enabled())
+#define EEH_POSSIBLE_ERROR(val, type) \
+	((val) == (type)~0 && eeh_detection_enabled())
 
 /*
  * Reads from a device which has been isolated by EEH will return
@@ -332,7 +333,7 @@ int eeh_pe_inject_err(struct eeh_pe *pe, int type, int func,
 
 #else /* !CONFIG_EEH */
 
-static inline bool eeh_enabled(void)
+static inline bool eeh_detection_enabled(void)
 {
         return false;
 }
