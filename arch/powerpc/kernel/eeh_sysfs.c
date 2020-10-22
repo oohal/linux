@@ -138,9 +138,6 @@ void eeh_sysfs_add_device(struct pci_dev *pdev)
 	struct eeh_dev *edev = pci_dev_to_eeh_dev(pdev);
 	int rc=0;
 
-	if (!eeh_enabled())
-		return;
-
 	if (edev && (edev->mode & EEH_DEV_SYSFS))
 		return;
 
@@ -158,11 +155,6 @@ void eeh_sysfs_add_device(struct pci_dev *pdev)
 void eeh_sysfs_remove_device(struct pci_dev *pdev)
 {
 	struct eeh_dev *edev = pci_dev_to_eeh_dev(pdev);
-
-	if (!edev) {
-		WARN_ON(eeh_enabled());
-		return;
-	}
 
 	edev->mode &= ~EEH_DEV_SYSFS;
 
