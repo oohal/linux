@@ -2459,7 +2459,8 @@ static void pnv_pci_ioda_fixup(void)
 	pnv_pci_enable_bridges();
 
 #ifdef CONFIG_EEH
-	pnv_eeh_post_init();
+	if (eeh_supported())
+		pnv_eeh_post_init();
 #endif
 }
 

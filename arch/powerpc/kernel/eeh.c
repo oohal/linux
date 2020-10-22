@@ -142,7 +142,7 @@ static struct eeh_stats eeh_stats;
 static int __init eeh_setup(char *str)
 {
 	if (!strcmp(str, "off"))
-		eeh_add_flag(EEH_FORCE_DISABLED);
+		eeh_add_flag(EEH_OFF);
 	else if (!strcmp(str, "early_log"))
 		eeh_add_flag(EEH_EARLY_DUMP_LOG);
 
@@ -968,6 +968,11 @@ int eeh_init(struct eeh_ops *ops)
 {
 	struct pci_controller *hose, *tmp;
 	int ret = 0;
+
+	if (eeh_has_flag(EEH_OFF)) {
+		pr_warn("EEH: Platform EEH support disabled by eeh=off\n");
+		return -ENXIO;
+	}
 
 	/* the platform should only initialise EEH once */
 	if (WARN_ON(eeh_ops))
@@ -1870,7 +1875,7 @@ static int __init eeh_init_proc(void)
 		proc_create_single("powerpc/eeh", 0, NULL, proc_eeh_show);
 
 		if (!eeh_supported())
-			return;
+			return 0;
 
 #ifdef CONFIG_DEBUG_FS
 		debugfs_create_file_unsafe("eeh_enable", 0600,

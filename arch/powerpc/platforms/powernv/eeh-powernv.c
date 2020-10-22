@@ -1701,14 +1701,16 @@ static int __init eeh_powernv_init(void)
 	 * size needs to be set before calling eeh_init().
 	 */
 	eeh_set_pe_aux_size(max_diag_size);
-	ppc_md.pcibios_bus_add_device = pnv_pcibios_bus_add_device;
 
 	ret = eeh_init(&pnv_eeh_ops);
-	if (!ret)
-		pr_info("EEH: PowerNV platform initialized\n");
-	else
+	if (ret) {
 		pr_info("EEH: Failed to initialize PowerNV platform (%d)\n", ret);
+		return ret;
+	}
 
-	return ret;
+	pr_info("EEH: PowerNV platform initialized\n");
+	ppc_md.pcibios_bus_add_device = pnv_pcibios_bus_add_device;
+
+	return 0;
 }
 machine_arch_initcall(powernv, eeh_powernv_init);

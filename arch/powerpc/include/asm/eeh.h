@@ -29,6 +29,7 @@ struct pci_dn;
 #define EEH_PROBE_MODE_DEVTREE	0x08	/* From device tree		     */
 #define EEH_ENABLE_IO_FOR_LOG	0x20	/* Enable IO for log		     */
 #define EEH_EARLY_DUMP_LOG	0x40	/* Dump log immediately		     */
+#define EEH_OFF			0x80	/* block platform EEH init entirely  */
 
 /*
  * Delay for PE reset, all in ms

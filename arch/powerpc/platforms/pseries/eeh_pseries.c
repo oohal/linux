@@ -366,6 +366,14 @@ void pseries_eeh_init_edev(struct pci_dn *pdn)
 	u32 pcie_flags;
 	int ret;
 
+	/*
+	 * This function is called directly by the pseries hotplug drivers
+	 * to setup EEH for newly added devices. Verify we have EEH support
+	 * since it might be disabled at boot.
+	 */
+	if (!eeh_supported())
+		return;
+
 	if (WARN_ON_ONCE(!eeh_has_flag(EEH_PROBE_MODE_DEVTREE)))
 		return;
 
@@ -862,9 +870,6 @@ static int __init eeh_pseries_init(void)
 	/* Set EEH probe mode */
 	eeh_add_flag(EEH_PROBE_MODE_DEVTREE | EEH_ENABLE_IO_FOR_LOG);
 
-	/* Set EEH machine dependent code */
-	ppc_md.pcibios_bus_add_device = pseries_pcibios_bus_add_device;
-
 	if (is_kdump_kernel() || reset_devices) {
 		pr_info("Issue PHB reset ...\n");
 		list_for_each_entry(phb, &hose_list, list_node) {
@@ -882,11 +887,15 @@ static int __init eeh_pseries_init(void)
 	}
 
 	ret = eeh_init(&pseries_eeh_ops);
-	if (!ret)
-		pr_info("EEH: pSeries platform initialized\n");
-	else
-		pr_info("EEH: pSeries platform initialization failure (%d)\n",
-			ret);
-	return ret;
+	if (ret) {
+		pr_info("EEH: pSeries platform initialization failure (%d)\n", ret);
+		return ret;
+	}
+
+	/* Set EEH machine dependent code */
+	ppc_md.pcibios_bus_add_device = pseries_pcibios_bus_add_device;
+	pr_info("EEH: pSeries platform initialized\n");
+
+	return 0;
 }
 machine_arch_initcall(pseries, eeh_pseries_init);
