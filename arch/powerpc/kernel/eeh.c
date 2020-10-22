@@ -1070,11 +1070,7 @@ void eeh_probe_device(struct pci_dev *dev)
  */
 void eeh_remove_device(struct pci_dev *dev)
 {
-	struct eeh_dev *edev;
-
-	if (!dev || !eeh_enabled())
-		return;
-	edev = pci_dev_to_eeh_dev(dev);
+	struct eeh_dev *edev = pci_dev_to_eeh_dev(dev);
 
 	/* Unregister the device with the EEH/PCI address search system */
 	dev_dbg(&dev->dev, "EEH: Removing device\n");
