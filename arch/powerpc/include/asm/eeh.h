@@ -255,6 +255,12 @@ static inline bool eeh_enabled(void)
 	return eeh_has_flag(EEH_ENABLED) && !eeh_has_flag(EEH_FORCE_DISABLED);
 }
 
+static inline bool eeh_supported(void)
+{
+	/* the platform must have called eeh_init() if EEH is supported */
+	return !!eeh_ops;
+}
+
 static inline void eeh_serialize_lock(unsigned long *flags)
 {
 	raw_spin_lock_irqsave(&confirm_error_lock, *flags);
@@ -327,6 +333,11 @@ int eeh_pe_inject_err(struct eeh_pe *pe, int type, int func,
 #else /* !CONFIG_EEH */
 
 static inline bool eeh_enabled(void)
+{
+        return false;
+}
+
+static inline bool eeh_supported(void)
 {
         return false;
 }

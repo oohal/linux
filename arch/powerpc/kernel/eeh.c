@@ -1012,6 +1012,9 @@ void eeh_probe_device(struct pci_dev *dev)
 {
 	struct eeh_dev *edev;
 
+	if (!eeh_supported())
+		return;
+
 	pr_debug("EEH: Adding device %s\n", pci_name(dev));
 
 	/*
@@ -1566,7 +1569,7 @@ EXPORT_SYMBOL_GPL(eeh_pe_inject_err);
 
 static int proc_eeh_show(struct seq_file *m, void *v)
 {
-	if (!eeh_enabled()) {
+	if (!eeh_supported()) {
 		seq_printf(m, "EEH Subsystem is globally disabled\n");
 		seq_printf(m, "eeh_total_mmio_ffs=%llu\n", eeh_stats.total_mmio_ffs);
 	} else {
@@ -1867,6 +1870,10 @@ static int __init eeh_init_proc(void)
 {
 	if (machine_is(pseries) || machine_is(powernv)) {
 		proc_create_single("powerpc/eeh", 0, NULL, proc_eeh_show);
+
+		if (!eeh_supported())
+			return;
+
 #ifdef CONFIG_DEBUG_FS
 		debugfs_create_file_unsafe("eeh_enable", 0600,
 					   powerpc_debugfs_root, NULL,
