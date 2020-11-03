@@ -141,10 +141,12 @@ static struct eeh_stats eeh_stats;
 
 static int __init eeh_setup(char *str)
 {
-	if (!strcmp(str, "off"))
-		eeh_add_flag(EEH_OFF);
-	else if (!strcmp(str, "early_log"))
+	if (!strcmp(str, "off")) {
+		eeh_add_flag(EEH_DISABLE_SETUP);
+		eeh_add_flag(EEH_DISABLE_DETECTION);
+	} else if (!strcmp(str, "early_log")) {
 		eeh_add_flag(EEH_EARLY_DUMP_LOG);
+	}
 
 	return 1;
 }

@@ -290,6 +290,16 @@ struct eeh_pe *eeh_pe_get(struct pci_controller *phb, int pe_no)
 	return eeh_pe_traverse(root, __eeh_pe_get, &pe_no);
 }
 
+static void eeh_pe_insert_edev(struct eeh_pe *pe, struct eeh_dev *edev)
+{
+	list_add_tail(&edev->entry, &pe->edevs);
+	edev->pe = pe;
+	eeh_device_count++;
+
+	/* eeh_edev_dbg() prints the PE address as part of the context */
+	eeh_edev_dbg(edev, "Added to PE");
+}
+
 /**
  * eeh_pe_tree_insert - Add EEH device to parent PE
  * @edev: EEH device
@@ -317,8 +327,6 @@ int eeh_pe_tree_insert(struct eeh_dev *edev, struct eeh_pe *new_pe_parent)
 	pe = eeh_pe_get(hose, edev->pe_config_addr);
 	if (pe) {
 		if (pe->type & EEH_PE_INVALID) {
-			list_add_tail(&edev->entry, &pe->edevs);
-			edev->pe = pe;
 			/*
 			 * We're running to here because of PCI hotplug caused by
 			 * EEH recovery. We need clear EEH_PE_INVALID until the top.
@@ -328,20 +336,20 @@ int eeh_pe_tree_insert(struct eeh_dev *edev, struct eeh_pe *new_pe_parent)
 				if (!(parent->type & EEH_PE_INVALID))
 					break;
 				parent->type &= ~EEH_PE_INVALID;
+				eeh_pe_dbg(pe, "cleared EEH_PE_INVALID\n");
+
 				parent = parent->parent;
 			}
 
-			eeh_edev_dbg(edev, "Added to existing PE (parent: PE#%x)\n",
-				     pe->parent->addr);
+			eeh_pe_insert_edev(pe, edev);
 		} else {
 			/* Mark the PE as type of PCI bus */
 			pe->type = EEH_PE_BUS;
-			edev->pe = pe;
+			eeh_pe_dbg(pe, "marked as EEH_PE_BUS\n");
 
-			/* Put the edev to PE */
-			list_add_tail(&edev->entry, &pe->edevs);
-			eeh_edev_dbg(edev, "Added to bus PE\n");
+			eeh_pe_insert_edev(pe, edev);
 		}
+
 		return 0;
 	}
 
@@ -377,15 +385,9 @@ int eeh_pe_tree_insert(struct eeh_dev *edev, struct eeh_pe *new_pe_parent)
 	/* link new PE into the tree */
 	pe->parent = new_pe_parent;
 	list_add_tail(&pe->child, &new_pe_parent->child_list);
-
-	/*
-	 * Put the newly created PE into the child list and
-	 * link the EEH device accordingly.
-	 */
-	list_add_tail(&edev->entry, &pe->edevs);
-	edev->pe = pe;
-	eeh_edev_dbg(edev, "Added to new (parent: PE#%x)\n",
-		     new_pe_parent->addr);
+	eeh_edev_dbg(pe, "Added to tree under parent PE#%x %s\n", new_pe_parent->addr,
+			(new_pe_parent->type & EEH_PE_PHB) ? "(phb)" : "");
+	eeh_pe_insert_edev(pe, edev);
 
 	return 0;
 }
@@ -414,6 +416,7 @@ int eeh_pe_tree_remove(struct eeh_dev *edev)
 	/* Remove the EEH device */
 	edev->pe = NULL;
 	list_del(&edev->entry);
+	eeh_device_count--;
 
 	/*
 	 * Check if the parent PE includes any EEH devices.

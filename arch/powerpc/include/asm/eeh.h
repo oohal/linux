@@ -23,8 +23,9 @@ struct pci_dn;
 #ifdef CONFIG_EEH
 
 /* EEH subsystem flags */
-#define EEH_ENABLED		0x01	/* EEH enabled			     */
-#define EEH_FORCE_DISABLED	0x02	/* EEH disabled			     */
+
+#define EEH_DISABLE_DETECTION	0x01 	/* Skip EEH detection checks         */
+#define EEH_DISABLE_SETUP	0x02	/* EEH disabled			     */
 #define EEH_PROBE_MODE_DEV	0x04	/* From PCI device		     */
 #define EEH_PROBE_MODE_DEVTREE	0x08	/* From device tree		     */
 #define EEH_ENABLE_IO_FOR_LOG	0x20	/* Enable IO for log		     */
@@ -163,6 +164,16 @@ struct eeh_dev {
 #define eeh_edev_warn(edev, fmt, ...) EEH_EDEV_PRINT(warn, (edev), fmt, ##__VA_ARGS__)
 #define eeh_edev_err(edev, fmt, ...) EEH_EDEV_PRINT(err, (edev), fmt, ##__VA_ARGS__)
 
+/* "fmt" must be a simple literal string */
+#define EEH_PE_PRINT(level, pe, fmt, ...) \
+	pr_##level("pci %04x EEH: PE#%x: " fmt, \
+	(edev)->controller->global_number, (pe->addr), \
+	##__VA_ARGS__)
+#define eeh_pe_dbg(pe, fmt, ...) EEH_PE_PRINT(debug, (pe), fmt, ##__VA_ARGS__)
+#define eeh_pe_info(pe, fmt, ...) EEH_PE_PRINT(info, (pe), fmt, ##__VA_ARGS__)
+#define eeh_pe_warn(pe, fmt, ...) EEH_PE_PRINT(warn, (pe), fmt, ##__VA_ARGS__)
+#define eeh_pe_err(pe, fmt, ...) EEH_PE_PRINT(err, (pe), fmt, ##__VA_ARGS__)
+
 static inline struct pci_dn *eeh_dev_to_pdn(struct eeh_dev *edev)
 {
 	return edev ? edev->pdn : NULL;
@@ -253,7 +264,7 @@ static inline bool eeh_has_flag(int flag)
 
 static inline bool eeh_detection_enabled(void)
 {
-	return eeh_has_flag(EEH_ENABLED) && !eeh_has_flag(EEH_FORCE_DISABLED);
+	return eeh_device_count && !eeh_has_flag(EEH_DISABLE_DETECTION);
 }
 
 static inline bool eeh_supported(void)
